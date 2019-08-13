@@ -5,7 +5,7 @@
 
     <!-- app wide -->
     <string name="step_fees"><![CDATA[<font color=#999999>Выберите комиссию</font><br><br>%1$s]]></string>
-    <string name="greetings">Bitcoin Кошелек-Молния\nПрочитайте <a href='http://lightning-wallet.com'>инструкцию</a></string>
+    <string name="greetings">Groestlcoin Кошелек-Молния\nПрочитайте <a href='http://lightning-wallet.com'>инструкцию</a></string>
     <string name="sets_rescan_ok">Сейчас кошелек закроется, рескан блокчейна начнется автоматически при следующем запуске</string>
     <string name="boost_details"><![CDATA[Хотите поднять комиссию для этой транзакции и подтвердить ее быстрее?<br><br>сейчас %1$s<br>после %2$s<br>]]></string>
     <string name="mnemonic_info">Мнемонический код важен!\n<a href="http://lightning-wallet.com/installing-lightning-wallet#mnemonic-code">Прочитайте</a> зачем он нужен\n\n\n<small>Подсказка: свайпните влево\nчтобы открыть QR сканер</small></string>
@@ -19,7 +19,7 @@
 
     <array name="denoms">
         <item><![CDATA[Satoshi <font color=#999999><small>= 0.00000001 btc</small></font>]]></item>
-        <item><![CDATA[Bitcoin <font color=#999999><small>= 100 000 000 sat</small></font>]]></item>
+        <item><![CDATA[Groestlcoin <font color=#999999><small>= 100 000 000 sat</small></font>]]></item>
     </array>
 
     <array name="restore_options">
@@ -54,7 +54,7 @@
     <string name="hivemind_details"><![CDATA[
         <strong>Hivemind deposits are disabled</strong><br><br>
         It will be possible to deposit funds to Hivemind if <a href="http://www.drivechain.info/">Drivechain</a> soft-fork gets activated.<br><br>
-        <a href="http://bitcoinhivemind.com/">Hivemind</a> is a Peer-to-Peer Oracle Protocol which absorbs accurate data into a blockchain so that Bitcoin-users can speculate in Prediction Markets.<br><br>
+        <a href="http://bitcoinhivemind.com/">Hivemind</a> is a Peer-to-Peer Oracle Protocol which absorbs accurate data into a blockchain so that Groestlcoin-users can speculate in Prediction Markets.<br><br>
         These markets have the <a href=http://bitcoinhivemind.com/papers/3_PM_Applications.pdf>potential</a> to revolutionize the emergence and diffusion of knowledge in society.
     ]]></string>
 
@@ -97,7 +97,7 @@
 
     <!-- dialogs -->
     <string name="amount_hint_sat"><![CDATA[Сумма в Satoshi%1$s]]></string>
-    <string name="amount_hint_btc"><![CDATA[Сумма в Bitcoin%1$s]]></string>
+    <string name="amount_hint_btc"><![CDATA[Сумма в Groestlcoin%1$s]]></string>
     <string name="amount_hint_newchan"><![CDATA[<br><small>минимум %1$s<br>максимум %2$s<br>баланс %3$s</small>]]></string>
     <string name="amount_hint_can_receive"><![CDATA[<br><small>can receive %1$s</small>]]></string>
     <string name="amount_hint_can_send"><![CDATA[<br><small>can send %1$s</small>]]></string>

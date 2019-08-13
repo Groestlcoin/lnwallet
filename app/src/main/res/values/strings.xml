@@ -6,7 +6,7 @@
     <!-- app wide -->
     <string name="step_fees"><![CDATA[<font color=#999999>Choose miner fee</font><br><br>%1$s]]></string>
     <string name="sets_rescan_ok">Wallet will be closed now and blockchain rescan is going to be started automatically on next launch</string>
-    <string name="greetings">Bitcoin Lightning Wallet\nPlease read a short yet important\n<a href='http://lightning-wallet.com'>wallet manual</a> before proceeding</string>
+    <string name="greetings">Groestlcoin Lightning Wallet\nPlease read a short yet important\n<a href='http://lightning-wallet.com'>wallet manual</a> before proceeding</string>
     <string name="boost_details"><![CDATA[Would you like to raise a fee for this transaction and thus get it confirmed faster?<br><br>current %1$s<br>raised %2$s<br>]]></string>
     <string name="mnemonic_info">Mnemonic phrase is important!\n<a href="http://lightning-wallet.com/installing-lightning-wallet#mnemonic-code">Read about it</a> and save it now\n\n\n<small>swipe screen to the left\nto open a QR scanner</small></string>
     <string name="fee_risky"><![CDATA[<small>%1$s %2$s<br><small><font color=#999999>Confirmation may take hours</font></small></small>]]></string>
@@ -19,7 +19,7 @@
 
     <array name="denoms">
         <item><![CDATA[Satoshi <font color=#999999><small>= 0.00000001 btc</small></font>]]></item>
-        <item><![CDATA[Bitcoin <font color=#999999><small>= 100 000 000 sat</small></font>]]></item>
+        <item><![CDATA[Groestlcoin <font color=#999999><small>= 100 000 000 sat</small></font>]]></item>
     </array>
 
     <array name="restore_options">
@@ -35,7 +35,7 @@
 
     <string name="channel_recovery_info">
         Recovery tool downloads available channel backups from Olympus servers and uses them to reimburse locked funds back into your on-chain wallet.
-        \n\nYou should expect a refunding Bitcoin transaction shortly after starting it if you do have lost channels with some locked funds, otherwise nothing
+        \n\nYou should expect a refunding Groestlcoin transaction shortly after starting it if you do have lost channels with some locked funds, otherwise nothing
         will happen.\n\nUsing this tool does not affect open channels currently present on this phone.
     </string>
 
@@ -59,7 +59,7 @@
     <string name="hivemind_details"><![CDATA[
         <strong>Hivemind deposits are disabled</strong><br><br>
         It will be possible to deposit funds to Hivemind if <a href="http://www.drivechain.info/">Drivechain</a> soft-fork gets activated.<br><br>
-        <a href="http://bitcoinhivemind.com/">Hivemind</a> is a Peer-to-Peer Oracle Protocol which absorbs accurate data into a blockchain so that Bitcoin-users can speculate in Prediction Markets.<br><br>
+        <a href="http://bitcoinhivemind.com/">Hivemind</a> is a Peer-to-Peer Oracle Protocol which absorbs accurate data into a blockchain so that Groestlcoin-users can speculate in Prediction Markets.<br><br>
         These markets have the <a href=http://bitcoinhivemind.com/papers/3_PM_Applications.pdf>potential</a> to revolutionize the emergence and diffusion of knowledge in society.
     ]]></string>
 
@@ -87,7 +87,7 @@
 
     <!-- menu and fab -->
     <string name="sets_set_fiat">Set Fiat currency</string>
-    <string name="sets_choose_unit">Choose Bitcoin unit</string>
+    <string name="sets_choose_unit">Choose Groestlcoin unit</string>
     <string name="sets_manage_olympus">Manage Olympus servers</string>
     <string name="sets_chan_recover">Use Olympus recovery tool</string>
     <string name="sets_migrator">Use wallet migration tool</string>
@@ -101,7 +101,7 @@
 
     <!-- dialogs -->
     <string name="amount_hint_sat"><![CDATA[Amount in Satoshi%1$s]]></string>
-    <string name="amount_hint_btc"><![CDATA[Amount in Bitcoin%1$s]]></string>
+    <string name="amount_hint_btc"><![CDATA[Amount in Groestlcoin%1$s]]></string>
 
     <string name="amount_hint_newchan"><![CDATA[<br><small>min capacity %1$s<br>max capacity %2$s<br>balance %3$s</small>]]></string>
     <string name="amount_hint_can_receive"><![CDATA[<br><small>can receive %1$s</small>]]></string>
@@ -132,12 +132,12 @@
     <string name="fp_add_print">Register at least one fingerprint in system settings</string>
 
     <!-- trusted node -->
-    <string name="sets_trusted">Use trusted Bitcoin node</string>
+    <string name="sets_trusted">Use trusted Groestlcoin node</string>
     <string name="trusted_hint_none">Disabled, using random nodes</string>
     <string name="trusted_hint">format is address/host:port\ntor address is supported</string>
 
     <string name="sets_trusted_title"><![CDATA[
-        Trusted Bitcoin node<br><br><small>Once an address is provided wallet
+        Trusted Groestlcoin node<br><br><small>Once an address is provided wallet
         will only be using your trusted node instead of random ones.</small>
     ]]></string>
 
@@ -151,10 +151,10 @@
     <string name="ln_outgoing_title_no_fee"><![CDATA[<font color=#0099FE><strong>Lightning payment</strong></font><br>%1$s<br><br>sent %2$s<br><small>%3$s at current rates</small>]]></string>
     <string name="ln_outgoing_title"><![CDATA[<font color=#0099FE><strong>Lightning payment</strong></font><br>%1$s<br><br>sent %2$s<br><small>%3$s at current rates</small><br>fee %4$s = %5$.2f%%]]></string>
 
-    <string name="btc_incoming_title"><![CDATA[<font color=#E68A00><strong>Bitcoin transaction</strong></font><br>%1$s<br><br>received %2$s<br><small>%3$s at current rates</small>]]></string>
-    <string name="btc_outgoing_title_no_fee"><![CDATA[<font color=#E68A00><strong>Bitcoin transaction</strong></font><br>%1$s<br><br>sent %2$s<br><small>%3$s at current rates</small>]]></string>
-    <string name="btc_outgoing_title"><![CDATA[<font color=#FF9900><strong>Bitcoin transaction</strong></font><br>%1$s<br><br>sent %2$s<br><small>%3$s at current rates</small><br>fee %4$s = %5$.2f%%]]></string>
-    <string name="btc_pending_title"><![CDATA[<font color=#FF9900><strong>Bitcoin transaction</strong></font><br><small>delayed channel refunding</small><br>%1$s<br><br>pending %2$s<br><small>%3$s at current rates</small><br>fee %4$s = %5$.2f%%]]></string>
+    <string name="btc_incoming_title"><![CDATA[<font color=#E68A00><strong>Groestlcoin transaction</strong></font><br>%1$s<br><br>received %2$s<br><small>%3$s at current rates</small>]]></string>
+    <string name="btc_outgoing_title_no_fee"><![CDATA[<font color=#E68A00><strong>Groestlcoin transaction</strong></font><br>%1$s<br><br>sent %2$s<br><small>%3$s at current rates</small>]]></string>
+    <string name="btc_outgoing_title"><![CDATA[<font color=#FF9900><strong>Groestlcoin transaction</strong></font><br>%1$s<br><br>sent %2$s<br><small>%3$s at current rates</small><br>fee %4$s = %5$.2f%%]]></string>
+    <string name="btc_pending_title"><![CDATA[<font color=#FF9900><strong>Groestlcoin transaction</strong></font><br><small>delayed channel refunding</small><br>%1$s<br><br>pending %2$s<br><small>%3$s at current rates</small><br>fee %4$s = %5$.2f%%]]></string>
 
     <string name="txs_view_outside">View on SmartBit site</string>
     <string name="txs_p2wsh">Contract funding</string>
@@ -166,15 +166,15 @@
     </array>
 
     <string name="send_scan_qr">Scan a QR code</string>
-    <string name="send_paste_payment_request"><![CDATA[<strong>Paste Lightning Invoice<br><font color=#999999><small>or Bitcoin address</small></font></strong>]]></string>
+    <string name="send_paste_payment_request"><![CDATA[<strong>Paste Lightning Invoice<br><font color=#999999><small>or Groestlcoin address</small></font></strong>]]></string>
     <string name="send_hivemind_deposit"><![CDATA[Deposit funds to Hivemind<br><font color=#999999><small>a prediction market sidechain</small></font>]]></string>
     <string name="ln_send_title"><![CDATA[<font color=#0099FE><strong>Send Lightning Payment</strong></font><small><br><br>%1$s</small>]]></string>
-    <string name="btc_send_title"><![CDATA[<font color=#E68A00><strong>Send Bitcoin Transaction</strong></font><br><br>%1$s]]></string>
+    <string name="btc_send_title"><![CDATA[<font color=#E68A00><strong>Send Groestlcoin Transaction</strong></font><br><br>%1$s]]></string>
 
     <string name="ln_send_howto"><![CDATA[
         You are trying to fulfill a Lightning payment request but there are currently no open
         <a href=https://lightning-wallet.com/using-lightning-wallet#payment-channel>payment channels</a> in this wallet.<br><br>How to fix this?<br><br>
-        - Open an outgoing channel with a peer of your choice, this requires some bitcoins to be present in this wallet as they will be used for funding.<br><br>
+        - Open an outgoing channel with a peer of your choice, this requires some Groestlcoins to be present in this wallet as they will be used for funding.<br><br>
         - <a href=https://www.bitrefill.com/buy/turbo-lightning-channel/>Purchase an incoming channel</a> with an immediately spendable balance on your side.
     ]]></string>
 
@@ -187,14 +187,14 @@
         2. <a href=https://www.bitrefill.com/thor-lightning-network-channels>Order</a> an <i>incoming channel</i> which would allow you to receive Lightning payments right away.
     ]]></string>
 
-    <string name="ln_receive_6conf"><![CDATA[&#9888; Can\'t ask for Lightning payments because your peer has not allowed receiving yet, this typically happens once a funding Bitcoin transaction gets 6 confirmations.]]></string>
+    <string name="ln_receive_6conf"><![CDATA[&#9888; Can\'t ask for Lightning payments because your peer has not allowed receiving yet, this typically happens once a funding Groestlcoin transaction gets 6 confirmations.]]></string>
     <string name="ln_receive_reserve"><![CDATA[&#9888; Can\'t ask for Lightning payments yet because first you need to spend at least %1$s in order to make some space for receiving.]]></string>
     <string name="ln_receive_suggestion"><![CDATA[&#9888; Can\'t ask for Lightning payments because no channels are present.<br>Tap to find out more!]]></string>
     <string name="ln_receive_ok">Make a QR-code with a Lightning Payment Request, can be used to receive fast off-chain payments.</string>
 
     <string name="btc_receive_option"><![CDATA[
-        <font color=#FF9900>Bitcoin transaction</font><small><br><br>Make a QR-code with on-chain
-        wallet address, can be used to receive regular Bitcoin transactions.</small>
+        <font color=#FF9900>Groestlcoin transaction</font><small><br><br>Make a QR-code with on-chain
+        wallet address, can be used to receive regular Groestlcoin transactions.</small>
     ]]></string>
 
     <string name="err_ln_peer_offline">Could not connect to %1$s</string>
@@ -211,7 +211,7 @@
 
     <string name="err_ln_still_opening">Failed because a payment channel is not open yet\n\nFunding transaction needs to get up to 6 confirmations before a channel can be used to send payments</string>
     <string name="err_ln_expired"><![CDATA[Expired payment detected<br><br>You may force close a related channel or contact a faulty peer and let them sort this out<br><br><strong>Expired payment hash</strong><br>%1$s]]></string>
-    <string name="err_tx_too_large">Failed because transaction is too big for Bitcoin network to process. Try breaking it into a number of smaller transactions.</string>
+    <string name="err_tx_too_large">Failed because transaction is too big for Groestlcoin network to process. Try breaking it into a number of smaller transactions.</string>
     <string name="err_gdrive_sign_in_failed">Could not sign in to GDrive, would you like to proceed without restoring channels from GDrive backups?</string>
     <string name="err_empty_shrunk">Failed because an output could not be shrunken for fees. Please add some funds and try again</string>
     <string name="err_ln_not_enough">None of your channels contains enough funds to send %1$s off-chain</string>
@@ -278,7 +278,7 @@
         <item>View refunding transaction</item>
     </array>
 
-    <string name="btc_status_operational">Bitcoin wallet is online</string>
+    <string name="btc_status_operational">Groestlcoin wallet is online</string>
     <string name="btc_status_connecting"><![CDATA[<font color=#E68A00>Connecting to peers</font>]]></string>
     <string name="btc_empty"><![CDATA[<font color=#BBBBBB>No on-chain funds</font>]]></string>
     <string name="ln_empty"><![CDATA[<font color=#BBBBBB>No off-chain funds</font>]]></string>
