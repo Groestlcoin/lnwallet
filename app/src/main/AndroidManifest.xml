@@ -23,7 +23,7 @@
         android:icon="@mipmap/ic_launcher"
         android:fullBackupContent="false"
         android:allowBackup="false"
-        android:label="Bitcoin">
+        android:label="Groestlcoin Lightning">
 
         <provider
             android:name="android.support.v4.content.FileProvider"
