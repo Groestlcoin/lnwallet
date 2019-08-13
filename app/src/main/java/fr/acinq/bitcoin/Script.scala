@@ -709,7 +709,7 @@ object Script {
         }
         case OP_FROMALTSTACK :: tail => run(tail, altstack.head :: stack, state.copy(altstack = altstack.tail), signatureVersion)
         case OP_HASH160 :: tail => run(tail, Crypto.hash160(stack.head) :: stack.tail, state.copy(opCount = opCount + 1), signatureVersion)
-        case OP_HASH256 :: tail => run(tail, Crypto.hash256(stack.head) :: stack.tail, state.copy(opCount = opCount + 1), signatureVersion)
+        case OP_HASH256 :: tail => run(tail, Crypto.groestl256(stack.head) :: stack.tail, state.copy(opCount = opCount + 1), signatureVersion)
         case OP_IFDUP :: tail => stack match {
           case Nil => throw new RuntimeException("Cannot perform OP_IFDUP on an empty stack")
           case head :: _ if castToBoolean(head) => run(tail, head :: stack, state.copy(opCount = opCount + 1), signatureVersion)

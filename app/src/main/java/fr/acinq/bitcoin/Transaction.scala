@@ -302,7 +302,7 @@ object Transaction extends BtcSerializer[Transaction] {
       One
     } else {
       val txCopy = prepareForSigning(tx, inputIndex, previousOutputScript, sighashType)
-      Crypto.hash256(Transaction.write(txCopy, Transaction.SERIALIZE_TRANSACTION_NO_WITNESS) ++ writeUInt32(sighashType))
+      Crypto.sha256(Transaction.write(txCopy, Transaction.SERIALIZE_TRANSACTION_NO_WITNESS) ++ writeUInt32(sighashType))
     }
   }
 
@@ -332,17 +332,17 @@ object Transaction extends BtcSerializer[Transaction] {
     signatureVersion match {
       case SigVersion.SIGVERSION_WITNESS_V0 =>
         val hashPrevOut: ByteVector = if (!isAnyoneCanPay(sighashType)) {
-          Crypto.hash256(tx.txIn.map(_.outPoint).map(OutPoint.write(_, Protocol.PROTOCOL_VERSION)).foldLeft(ByteVector.empty)(_ ++ _))
+          Crypto.sha256(tx.txIn.map(_.outPoint).map(OutPoint.write(_, Protocol.PROTOCOL_VERSION)).foldLeft(ByteVector.empty)(_ ++ _))
         } else Zeroes
 
         val hashSequence: ByteVector = if (!isAnyoneCanPay(sighashType) && !isHashSingle(sighashType) && !isHashNone(sighashType)) {
-          Crypto.hash256(tx.txIn.map(_.sequence).map(s => Protocol.writeUInt32(s.toInt)).foldLeft(ByteVector.empty)(_ ++ _))
+          Crypto.sha256(tx.txIn.map(_.sequence).map(s => Protocol.writeUInt32(s.toInt)).foldLeft(ByteVector.empty)(_ ++ _))
         } else Zeroes
 
         val hashOutputs: ByteVector = if (!isHashSingle(sighashType) && !isHashNone(sighashType)) {
-          Crypto.hash256(tx.txOut.map(TxOut.write(_, Protocol.PROTOCOL_VERSION)).foldLeft(ByteVector.empty)(_ ++ _))
+          Crypto.sha256(tx.txOut.map(TxOut.write(_, Protocol.PROTOCOL_VERSION)).foldLeft(ByteVector.empty)(_ ++ _))
         } else if (isHashSingle(sighashType) && inputIndex < tx.txOut.size) {
-          Crypto.hash256(TxOut.write(tx.txOut(inputIndex), Protocol.PROTOCOL_VERSION))
+          Crypto.sha256(TxOut.write(tx.txOut(inputIndex), Protocol.PROTOCOL_VERSION))
         } else Zeroes
 
         val out = new ByteArrayOutputStream()
@@ -357,7 +357,7 @@ object Transaction extends BtcSerializer[Transaction] {
         Protocol.writeUInt32(tx.lockTime.toInt, out)
         Protocol.writeUInt32(sighashType, out)
         val preimage = out.toByteArray
-        Crypto.hash256(ByteVector.view(preimage))
+        Crypto.sha256(ByteVector.view(preimage))
       case _ =>
         hashForSigning(tx, inputIndex, previousOutputScript, sighashType)
     }
@@ -502,11 +502,11 @@ case class Transaction(version: Long, txIn: Seq[TxIn], txOut: Seq[TxOut], lockTi
   import Transaction._
 
   // standard transaction hash, used to identify transactions (in transactions outputs for example)
-  lazy val hash: ByteVector = Crypto.hash256(Transaction.write(this, SERIALIZE_TRANSACTION_NO_WITNESS))
+  lazy val hash: ByteVector = Crypto.sha256(Transaction.write(this, SERIALIZE_TRANSACTION_NO_WITNESS))
   lazy val txid: ByteVector = hash.reverse
   // witness transaction hash that includes witness data. used to compute the witness commitment included in the coinbase
   // transaction of segwit blocks
-  lazy val whash: ByteVector = Crypto.hash256(Transaction.write(this))
+  lazy val whash: ByteVector = Crypto.sha256(Transaction.write(this))
   lazy val wtxid: ByteVector = whash.reverse
   lazy val bin: ByteVector = Transaction.write(this)
   lazy val allOutputsAmount: Satoshi = txOut.map(_.amount).sum

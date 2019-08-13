@@ -93,7 +93,7 @@ object BlockHeader extends BtcSerializer[BlockHeader] {
   * @param nonce             The nonce used to generate this block… to allow variations of the header and compute different hashes
   */
 case class BlockHeader(version: Long, hashPreviousBlock: ByteVector, hashMerkleRoot: ByteVector, time: Long, bits: Long, nonce: Long) extends BtcSerializable[BlockHeader] {
-  lazy val hash: ByteVector = Crypto.hash256(BlockHeader.write(this))
+  lazy val hash: ByteVector = Crypto.groestl(BlockHeader.write(this))
 
   // hash is reversed here (same as tx id)
   lazy val blockId = hash.reverse
@@ -126,21 +126,21 @@ object Block extends BtcSerializer[Block] {
 
   // genesis blocks
   val LivenetGenesisBlock = {
-    val script = OP_PUSHDATA(writeUInt32(486604799L)) :: OP_PUSHDATA(ByteVector.fromValidHex("04")) :: OP_PUSHDATA(ByteVector("The Times 03/Jan/2009 Chancellor on brink of second bailout for banks".getBytes("UTF-8"))) :: Nil
-    val scriptPubKey = OP_PUSHDATA(ByteVector.fromValidHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f")) :: OP_CHECKSIG :: Nil
+    val script = OP_PUSHDATA(writeUInt32(486604799L)) :: OP_PUSHDATA(hex"04") :: OP_PUSHDATA(ByteVector("Pressure must be put on Vladimir Putin over Crimea".getBytes("UTF-8"))) :: Nil
+    val scriptPubKey = OP_PUSHDATA(hex"04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f") :: OP_CHECKSIG :: Nil
     Block(
-      BlockHeader(version = 1, hashPreviousBlock = Zeroes, hashMerkleRoot = ByteVector.fromValidHex("3ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a"), time = 1231006505, bits = 0x1d00ffff, nonce = 2083236893),
+      BlockHeader(version = 112, hashPreviousBlock = Zeroes, hashMerkleRoot = ByteVector.fromValidHex("bb2866aaca46c4428ad08b57bc9d1493abaf64724b6c3052a7c8f958df68e93c"), time = 1395342829, bits = 0x1e0fffff, nonce = 220035),
       List(
         Transaction(version = 1,
           txIn = List(TxIn.coinbase(script)),
-          txOut = List(TxOut(amount = 50 btc, publicKeyScript = scriptPubKey)),
+          txOut = List(TxOut(amount = 0 btc, publicKeyScript = scriptPubKey)),
           lockTime = 0))
     )
   }
 
-  val TestnetGenesisBlock = LivenetGenesisBlock.copy(header = LivenetGenesisBlock.header.copy(time = 1296688602, nonce = 414098458))
+  val TestnetGenesisBlock = LivenetGenesisBlock.copy(header = LivenetGenesisBlock.header.copy(time = 1440000002, nonce = 6556309, version = 3, bits = 0x1e00FFFF))
 
-  val RegtestGenesisBlock = LivenetGenesisBlock.copy(header = LivenetGenesisBlock.header.copy(bits = 0x207fffffL, nonce = 2, time = 1296688602))
+  val RegtestGenesisBlock = LivenetGenesisBlock.copy(header = LivenetGenesisBlock.header.copy(time = 1440000002, nonce = 6556309, version = 3, bits = 0x1e00FFFF))
 
   val SegnetGenesisBlock = LivenetGenesisBlock.copy(header = LivenetGenesisBlock.header.copy(bits = 503447551, time = 1452831101, nonce = 0))
 
@@ -185,7 +185,7 @@ object Block extends BtcSerializer[Block] {
     (witnessReservedValue(coinbase), witnessCommitment(coinbase)) match {
       case (Some(nonce), Some(commitment)) =>
         val rootHash = MerkleTree.computeRoot(Zeroes +: block.tx.tail.map(tx => tx.whash))
-        val commitmentHash = Crypto.hash256(rootHash ++ nonce)
+        val commitmentHash = Crypto.sha256(rootHash ++ nonce)
         commitment == commitmentHash
       case _ if block.tx.exists(_.hasWitness) => false // block has segwit transactions but no witness commitment
       case _ => true

@@ -3,6 +3,7 @@ package fr.acinq.bitcoin
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.math.BigInteger
 
+import com.hashengineering.crypto.Groestl
 import org.bitcoin.{NativeSecp256k1, Secp256k1Context}
 import org.slf4j.LoggerFactory
 import org.spongycastle.asn1.sec.SECNamedCurves
@@ -69,7 +70,7 @@ object Crypto {
       * @return this * G where G is the curve generator
       */
     def toPoint: Point = if (Secp256k1Context.isEnabled) {
-      Point(ByteVector.view(NativeSecp256k1.computePubkey(toBin.toArray)))
+      Point(ByteVector.view(NativeSecp256k1.computePubkey(toBin.toArray, true)))
     } else {
       Point(params.getG() * value)
     }
@@ -142,7 +143,7 @@ object Crypto {
     def substract(point: Point): Point = Point(value.subtract(point.value))
 
     def multiply(scalar: Scalar): Point = if (Secp256k1Context.isEnabled)
-      Point(ByteVector.view(NativeSecp256k1.pubKeyTweakMul(toBin(true).toArray, scalar.toBin.toArray)))
+      Point(ByteVector.view(NativeSecp256k1.pubKeyTweakMul(toBin(true).toArray, scalar.toBin.toArray, true)))
     else
       Point(value.multiply(scalar.value))
 
@@ -242,12 +243,21 @@ object Crypto {
     ByteVector.view(out)
   }
 
+  def hash2(digest: Groestl)(input: ByteVector): ByteVector = {
+    val out = new Array[Byte](digest.getDigestSize)
+    (Groestl.digest(input.toArray)).copyToArray(out)
+    ByteVector.view(out)
+  }
+
   def sha1 = hash(new SHA1Digest) _
 
   def sha256 = (x: ByteVector) => hash(new SHA256Digest)(x)
 
   def ripemd160 = hash(new RIPEMD160Digest) _
 
+  def groestl = hash2(new Groestl) _
+
+  //def groestl32 = (x: ByteVector) => ByteVector32(groestl256(x))
   /**
     * 160 bits bitcoin hash, used mostly for address encoding
     * hash160(input) = RIPEMD160(SHA256(input))
@@ -265,6 +275,19 @@ object Crypto {
     * @return the 256 bits BTC hash of input
     */
   def hash256(input: ByteVector): ByteVector = sha256(sha256(input))
+
+  /**
+    * 256 bits groestl hash
+    * hash256(input) = groestl(groestl(input))
+    *
+    * @param input array of byte
+    * @return the 256 bits BTC hash of input
+    */
+  def groestl256(input: ByteVector):ByteVector = {
+    var out = new Array[Byte](32)
+    (Groestl.digest(input.toArray)).copyToArray(out)//groestl(input)
+    ByteVector.view(out)
+  }
 
   /**
     * An ECDSA signature is a (r, s) pair. Bitcoin uses DER encoded signatures

@@ -18,7 +18,7 @@ import scodec.bits.ByteVector
 object Base58 {
 
   object Prefix {
-    val PubkeyAddress = 0.toByte
+    val PubkeyAddress = 36.toByte
     val ScriptAddress = 5.toByte
     val SecretKey = 128.toByte
     val PubkeyAddressTestnet = 111.toByte
@@ -49,7 +49,7 @@ object Base58 {
   *
   */
 object Base58Check {
-  def checksum(data: ByteVector) = Crypto.hash256(data).take(4)
+  def checksum(data: ByteVector) = Crypto.groestl256(data).take(4)//Crypto.hash256(data).take(4)
 
   /**
     * Encode data in Base58Check format.
