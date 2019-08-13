@@ -139,7 +139,7 @@ object Bech32 {
   /**
     * encode a bitcoin witness address
     *
-    * @param hrp            should be "bc" or "tb"
+    * @param hrp            should be "grs" or "tgrs"
     * @param witnessVersion witness version (0 to 16, only 0 is currently defined)
     * @param data           witness program: if version is 0, either 20 bytes (P2WPKH) or 32 bytes (P2WSH)
     * @return a bech32 encoded witness address
@@ -172,13 +172,13 @@ object Bech32 {
 
   def decodeWitnessAddressMainChain(address: String): (String, Byte, ByteVector) = {
     val (hrp, version, bin) = decodeWitnessAddress(address)
-    require(hrp == "bc" || hrp == "tb" || hrp == "bcrt", s"invalid main chain HRP $hrp")
+    require(hrp == "grs" || hrp == "tgrs" || hrp == "grsrt", s"invalid main chain HRP $hrp")
     (hrp, version, bin)
   }
 
   def decodeWitnessAddressHivemind(address: String): (String, Byte, ByteVector) = {
     val (hrp, version, bin) = decodeWitnessAddress(address)
-    require(hrp == "hmbc" || hrp == "hmtb" || hrp == "hmbcrt", s"invalid hivemind HRP $hrp")
+    require(hrp == "hmgrs" || hrp == "hmtgrs" || hrp == "hmgrsrt", s"invalid hivemind HRP $hrp")
     (hrp, version, bin)
   }
 

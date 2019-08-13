@@ -252,7 +252,7 @@ trait BtcSerializable[T] {
 }
 
 object Message extends BtcSerializer[Message] {
-  val MagicMain = 0xD9B4BEF9L
+  val MagicMain = 0xD4B4BEF9
   val MagicTestNet = 0xDAB5BFFAL
   val MagicTestnet3 = 0x0709110BL
   val MagicNamecoin = 0xFEB4BEF9L
@@ -270,7 +270,7 @@ object Message extends BtcSerializer[Message] {
     val payload_array = new Array[Byte](length.toInt)
     in.read(payload_array)
     val payload = ByteVector.view(payload_array)
-    require(checksum == uint32(Crypto.hash256(payload).toArray.take(4), order = ByteOrder.LITTLE_ENDIAN), "invalid checksum")
+    require(checksum == uint32(Crypto.groestl256(payload).toArray.take(4), order = ByteOrder.LITTLE_ENDIAN), "invalid checksum")
     Message(magic, command, payload)
   }
 
@@ -280,7 +280,7 @@ object Message extends BtcSerializer[Message] {
     input.command.getBytes("ISO-8859-1").copyToArray(buffer)
     writeBytes(buffer, out)
     writeUInt32(input.payload.length, out)
-    val checksum = Crypto.hash256(input.payload).take(4).toArray
+    val checksum = Crypto.groestl(input.payload).take(4).toArray
     writeBytes(checksum, out)
     writeBytes(input.payload.toArray, out)
   }

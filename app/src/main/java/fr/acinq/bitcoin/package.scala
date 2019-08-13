@@ -157,9 +157,9 @@ package object bitcoin {
   def computeP2WpkhAddress(pub: PublicKey, chainHash: ByteVector): String = {
     val hash = pub.hash160
     val hrp = chainHash match {
-      case Block.LivenetGenesisBlock.hash => "bc"
-      case Block.TestnetGenesisBlock.hash => "tb"
-      case Block.RegtestGenesisBlock.hash => "bcrt"
+      case Block.LivenetGenesisBlock.hash => "grs"
+      case Block.TestnetGenesisBlock.hash => "tgrs"
+      case Block.RegtestGenesisBlock.hash => "grsrt"
       case _ => throw new IllegalArgumentException("Unknown chain hash: " + chainHash)
     }
     Bech32.encodeWitnessAddress(hrp, 0, hash)
