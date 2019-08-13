@@ -14,7 +14,7 @@ import scodec.bits.ByteVector
 
 
 object Hivemind {
-  val encodedPrivKey = "L3UjtLhNXKZaDgFtf14EHkxV1p5CKUoyRUT5DcU7aUS1X2yX8hhg"
+  val encodedPrivKey = "L3UjtLhNXKZaDgFtf14EHkxV1p5CKUoyRUT5DcU7aUS1X31S3iJG"
   val scriptPubKey = ByteVector.fromValidHex("76a9147c33a3f6d9d5b873f96dba4b12d6aaf6be71fbd288ac")
   val (_, data) = Base58Check decode encodedPrivKey
   val privateKey = PrivateKey(data)
