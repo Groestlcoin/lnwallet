@@ -131,11 +131,11 @@ class WalletApp extends Application { me =>
       uri
     }
 
-    def toBitcoinUri(addr: String) = bitcoinUri(s"bitcoin:$addr")
+    def toBitcoinUri(addr: String) = bitcoinUri(s"groestlcoin:$addr")
     def recordValue(rawInputText: String) = value = parse(rawInputText)
     def parse(rawInputTextToParse: String) = rawInputTextToParse take 2880 match {
-      case bitcoinUriLink if bitcoinUriLink startsWith "bitcoin" => bitcoinUri(bitcoinUriLink)
-      case bitcoinUriLink if bitcoinUriLink startsWith "BITCOIN" => bitcoinUri(bitcoinUriLink.toLowerCase)
+      case bitcoinUriLink if bitcoinUriLink startsWith "groestlcoin" => bitcoinUri(bitcoinUriLink)
+      case bitcoinUriLink if bitcoinUriLink startsWith "GROESTLCOIN" => bitcoinUri(bitcoinUriLink.toLowerCase)
       case nodeLink(key, host, port) => mkNodeAnnouncement(PublicKey(ByteVector fromValidHex key), NodeAddress.fromParts(host, port.toInt), host)
       case shortNodeLink(key, host) => mkNodeAnnouncement(PublicKey(ByteVector fromValidHex key), NodeAddress.fromParts(host, 9735), host)
       case lnPayReq(prefix, data) => PaymentRequest.read(s"$prefix$data")
