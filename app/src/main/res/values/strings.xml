@@ -18,8 +18,8 @@
     <string name="wallet_create">New Wallet</string>
 
     <array name="denoms">
-        <item><![CDATA[Satoshi <font color=#999999><small>= 0.00000001 btc</small></font>]]></item>
-        <item><![CDATA[Groestlcoin <font color=#999999><small>= 100 000 000 sat</small></font>]]></item>
+        <item><![CDATA[Gro <font color=#999999><small>= 0.00000001 grs</small></font>]]></item>
+        <item><![CDATA[Groestlcoin <font color=#999999><small>= 100 000 000 gro</small></font>]]></item>
     </array>
 
     <array name="restore_options">
@@ -100,7 +100,7 @@
     <string name="action_ln_open">Open new channel</string>
 
     <!-- dialogs -->
-    <string name="amount_hint_sat"><![CDATA[Amount in Satoshi%1$s]]></string>
+    <string name="amount_hint_sat"><![CDATA[Amount in Gro%1$s]]></string>
     <string name="amount_hint_btc"><![CDATA[Amount in Groestlcoin%1$s]]></string>
 
     <string name="amount_hint_newchan"><![CDATA[<br><small>min capacity %1$s<br>max capacity %2$s<br>balance %3$s</small>]]></string>

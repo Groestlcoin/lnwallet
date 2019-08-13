@@ -55,7 +55,7 @@ trait Denomination { me =>
 object SatDenomination extends Denomination {
   val fmt = new DecimalFormat("###,###,###.###")
   val amountInTxt = app getString amount_hint_sat
-  val sign = "\u00A0sat"
+  val sign = "\u00A0gro"
   val factor = 1000L
 
   fmt setDecimalFormatSymbols symbols
@@ -72,7 +72,7 @@ object BtcDenomination extends Denomination {
   val fmt = new DecimalFormat("##0.00000000###")
   val amountInTxt = app getString amount_hint_btc
   val factor = 100000000000L
-  val sign = "\u00A0btc"
+  val sign = "\u00A0grs"
 
   fmt setDecimalFormatSymbols symbols
   def parsed(msat: MilliSatoshi) =
