@@ -278,7 +278,8 @@ class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar w
     def generatePopup = {
       val detailsWrapper = host.getLayoutInflater.inflate(R.layout.frag_tx_btc_details, null)
       detailsWrapper.findViewById(R.id.viewTxOutside).asInstanceOf[Button] setOnClickListener onButtonTap {
-        host startActivity new Intent(Intent.ACTION_VIEW, Uri parse s"https://smartbit.com.au/tx/$txid")
+        val uri = if(!BuildConfig.APPLICATION_ID.contains("testnet")) s"https://chainz.cryptoid.info/grs/tx.dws?" else s"https://chainz.cryptoid.info/grs-test/tx.dws?"
+        host startActivity new Intent(Intent.ACTION_VIEW, Uri parse s"$uri$txid")
       }
 
       val inFiat = msatInFiatHuman(stat.amount)
@@ -417,7 +418,8 @@ class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar w
       }
 
       detailsWrapper.findViewById(R.id.viewTxOutside).asInstanceOf[Button] setOnClickListener onButtonTap {
-        host startActivity new Intent(Intent.ACTION_VIEW, Uri parse s"https://smartbit.com.au/tx/$txid")
+        val uri = if(!BuildConfig.APPLICATION_ID.contains("testnet")) s"https://chainz.cryptoid.info/grs/tx.dws?" else s"https://chainz.cryptoid.info/grs-test/tx.dws?"
+        host startActivity new Intent(Intent.ACTION_VIEW, Uri parse s"$uri$txid")
       }
 
       val views = new ArrayAdapter(host, R.layout.frag_top_tip, R.id.titleTip, humanValues.map(_.html).toArray)

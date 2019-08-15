@@ -48,7 +48,7 @@ import java.io.File
 
 
 class WalletApp extends Application { me =>
-  lazy val params = org.bitcoinj.params.MainNetParams.get
+  lazy val params = if(BuildConfig.APPLICATION_ID.contains("testnet")) org.bitcoinj.params.TestNet3Params.get else org.bitcoinj.params.MainNetParams.get
   lazy val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
   lazy val walletFile = new File(getFilesDir, walletFileName)
   lazy val chainFile = new File(getFilesDir, chainFileName)
@@ -153,7 +153,8 @@ class WalletApp extends Application { me =>
     def trustedNodeTry = Try(nodeaddress.decode(BitVector fromValidHex wallet.getDescription).require.value)
     def fundingPubScript(some: HasCommitments) = singletonList(some.commitments.commitInput.txOut.publicKeyScript: org.bitcoinj.script.Script)
     def closingPubKeyScripts(cd: ClosingData) = cd.commitTxs.flatMap(_.txOut).map(_.publicKeyScript: org.bitcoinj.script.Script).asJava
-    def useCheckPoints(time: Long) = CheckpointManager.checkpoint(params, getAssets open "checkpoints.txt", store, time)
+    val checkpointsFile = if(!BuildConfig.APPLICATION_ID.contains("testnet")) "checkpoints.txt" else "checkpoints-testnet.txt"
+    def useCheckPoints(time: Long) = CheckpointManager.checkpoint(params, getAssets open checkpointsFile, store, time)
 
     def sign(unsigned: SendRequest) = {
       // Create a tx ready for broadcast

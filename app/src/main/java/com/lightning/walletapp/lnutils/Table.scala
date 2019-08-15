@@ -9,7 +9,7 @@ import com.lightning.walletapp.lnutils.olympus.CloudData
 import android.content.Context
 import scodec.bits.ByteVector
 import android.net.Uri
-
+import com.lightning.walletapp.BuildConfig
 
 object OlympusTable extends Table {
   val (table, identifier, url, data, auth, order, removable) = ("olympus", "identifier", "url", "data", "auth", "ord", "removable")
@@ -163,10 +163,9 @@ extends SQLiteOpenHelper(context, name, null, 5) {
     case byteVec: ByteVector => byteVec.toHex
     case otherwise => otherwise.toString
   }
-
   def change(sql: String, params: Any*) = base.execSQL(sql, params.map(asString).toArray)
   def select(sql: String, params: Any*) = base.rawQuery(sql, params.map(asString).toArray)
-  def sqlPath(tbl: String) = Uri parse s"sqlite://com.lightning.walletapp/table/$tbl"
+  def sqlPath(tbl: String) = Uri parse s"sqlite://${BuildConfig.APPLICATION_ID}/table/$tbl"
 
   def txWrap(run: => Unit) = try {
     runAnd(base.beginTransaction)(run)

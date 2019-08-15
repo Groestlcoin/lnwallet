@@ -242,13 +242,13 @@ class SettingsActivity extends TimerActivity with HumanTimeDisplay { me =>
         val zygote = WalletZygote(1, dbByteVec, walletByteVec, chainByteVec)
         val encoded = walletZygoteCodec.encode(zygote).require.toByteArray
 
-        val name = s"BLW Snapshot ${new Date}.txt"
+        val name = if(!BuildConfig.APPLICATION_ID.contains("testnet")) s"GLW Snapshot ${new Date}.txt" else s"GLWT Snapshot ${new Date}.txt"
         val walletSnapshotFilePath = new File(getCacheDir, "images")
         if (!walletSnapshotFilePath.isFile) walletSnapshotFilePath.mkdirs
         val savedFile = new File(walletSnapshotFilePath, name)
         Files.write(encoded, savedFile)
 
-        val fileURI = FileProvider.getUriForFile(me, "com.lightning.walletapp", savedFile)
+        val fileURI = FileProvider.getUriForFile(me, BuildConfig.APPLICATION_ID, savedFile)
         val share = new Intent setAction Intent.ACTION_SEND addFlags Intent.FLAG_GRANT_READ_URI_PERMISSION
         share.putExtra(Intent.EXTRA_STREAM, fileURI).setDataAndType(fileURI, getContentResolver getType fileURI)
         me startActivity Intent.createChooser(share, "Choose an app")

@@ -66,6 +66,8 @@ object FragLNStart {
 
 class FragLNStart extends Fragment with SearchBar with HumanTimeDisplay { me =>
   override def onCreateView(inf: LayoutInflater, vg: ViewGroup, bn: Bundle) = inf.inflate(R.layout.frag_ln_start, vg, false)
+  val testnet = BuildConfig.APPLICATION_ID.contains("testnet")
+
   val bitrefillKey = PublicKey.fromValidHex("030c3f19d742ca294a55c00376b3b355c3c90d61c6b6b39554dbc7ac19b141c14f")
   val liteGoKey = PublicKey.fromValidHex("029aee02904d4e419770b93c1b07aae2814a79032e23cafb4024cbea6fb71be106")
   val acinqKey = PublicKey.fromValidHex("03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f")
@@ -77,7 +79,7 @@ class FragLNStart extends Fragment with SearchBar with HumanTimeDisplay { me =>
   val bitrefill = HardcodedNodeView(bitrefillNa, "<i>bitrefill.com</i>")
   val acinq = HardcodedNodeView(acinqNa, "<i>strike.acinq.co</i>")
   val liteGo = HardcodedNodeView(liteGoNa, "<i>litego.io</i>")
-  val hardcodedNodes = Vector(acinq, bitrefill, liteGo)
+  val hardcodedNodes = if(testnet) Vector(acinq, bitrefill, liteGo) else Vector()
 
   lazy val host = me.getActivity.asInstanceOf[LNStartActivity]
   private[this] var nodes = Vector.empty[StartNodeView]

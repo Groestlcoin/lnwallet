@@ -10,7 +10,7 @@ import com.lightning.walletapp.ln.RoutingInfoTag.PaymentRoute
 import com.lightning.walletapp.lnutils.olympus.OlympusWrap
 import com.lightning.walletapp.ln.LNParams.DepthAndDead
 import com.lightning.walletapp.ln.wire.NodeAnnouncement
-import com.lightning.walletapp.ChannelManager
+import com.lightning.walletapp.{BuildConfig, ChannelManager}
 import com.lightning.walletapp.ln.Tools.Bytes
 import fr.acinq.eclair.UInt64
 import scodec.bits.ByteVector
@@ -20,13 +20,13 @@ object LNParams { me =>
   type DepthAndDead = (Int, Boolean)
   val localFeatures = ByteVector.fromValidHex("8a")
   val globalFeatures = ByteVector.fromValidHex("")
-  val chainHash = Block.LivenetGenesisBlock.hash
+  val chainHash = if(!BuildConfig.APPLICATION_ID.contains("testnet")) Block.LivenetGenesisBlock.hash else Block.TestnetGenesisBlock.hash
 
   val minDepth = 1
   val minCapacityMsat = 300000000L
   val channelReserveToFundingRatio = 100
 
-  final val dust = Satoshi(546)
+  final val dust = Satoshi(5460)
   final val maxToSelfDelay = 2016
   final val minFeeratePerKw = 253
   final val maxCltvDelta = 7 * 144L

@@ -1,4 +1,5 @@
 <resources>
+    <string name="app_name">Groestlcoin Lightning</string>
     <string name="lang">eng</string>
     <string name="emerge_report">Show error report</string>
     <string name="emerge_mode">Emergency mode</string>
