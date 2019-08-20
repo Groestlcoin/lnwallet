@@ -338,7 +338,7 @@ class WalletActivity extends NfcReaderActivity with ScanActivity { me =>
   def goSendPaymentForm(top: View) = {
     val fragCenterList = getLayoutInflater.inflate(R.layout.frag_center_list, null).asInstanceOf[ListView]
     val alert = showForm(negBuilder(dialog_cancel, me getString action_coins_send, fragCenterList).create)
-    val options = Array(send_scan_qr, send_paste_payment_request, send_hivemind_deposit).map(res => getString(res).html)
+    val options = Array(send_scan_qr, send_paste_payment_request/*, send_hivemind_deposit*/).map(res => getString(res).html)
     fragCenterList setOnItemClickListener onTap { case 0 => scanQR case 1 => pasteRequest case 2 => depositHivemind }
     fragCenterList setAdapter new ArrayAdapter(me, R.layout.frag_top_tip, R.id.titleTip, options)
     fragCenterList setDividerHeight 0
