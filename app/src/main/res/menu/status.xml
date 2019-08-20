@@ -6,6 +6,7 @@
         android:title="Info"
         app:showAsAction="always|collapseActionView"
         android:icon="@drawable/baseline_help_outline_white_24"
-        android:id="@+id/actionQuestionMark"/>
+        android:id="@+id/actionQuestionMark"
+        android:visible="false"/>
 
 </menu>
