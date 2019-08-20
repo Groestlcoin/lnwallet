@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Groestlcoin Testnet Lightning</string>
 
-    <string name="greetings">Groestlcoin Testnet Lightning Wallet\nPlease read a short yet important\n<a href='http://lightning-wallet.com'>wallet manual</a> before proceeding</string>
+    <string name="greetings">Groestlcoin Testnet Lightning Wallet</string>
 
 
     <string name="channel_recovery_info">
@@ -12,9 +12,9 @@
 
     <string name="hivemind_details"><![CDATA[
         <strong>Hivemind deposits are disabled</strong><br><br>
-        It will be possible to deposit funds to Hivemind if <a href="http://www.drivechain.info/">Drivechain</a> soft-fork gets activated.<br><br>
-        <a href="http://bitcoinhivemind.com/">Hivemind</a> is a Peer-to-Peer Oracle Protocol which absorbs accurate data into a blockchain so that Groestlcoin TestNet-users can speculate in Prediction Markets.<br><br>
-        These markets have the <a href=http://bitcoinhivemind.com/papers/3_PM_Applications.pdf>potential</a> to revolutionize the emergence and diffusion of knowledge in society.
+        It will be possible to deposit funds to Hivemind if Drivechain soft-fork gets activated.<br><br>
+        Hivemind is a Peer-to-Peer Oracle Protocol which absorbs accurate data into a blockchain so that Groestlcoin TestNet-users can speculate in Prediction Markets.<br><br>
+        These markets have the potential to revolutionize the emergence and diffusion of knowledge in society.
     ]]></string>
 
 
@@ -36,30 +36,18 @@
     <string name="btc_outgoing_title"><![CDATA[<font color=#FF9900><strong>Groestlcoin Testnet transaction</strong></font><br>%1$s<br><br>sent %2$s<br><small>%3$s at current rates</small><br>fee %4$s = %5$.2f%%]]></string>
     <string name="btc_pending_title"><![CDATA[<font color=#FF9900><strong>Groestlcoin Testnet transaction</strong></font><br><small>delayed channel refunding</small><br>%1$s<br><br>pending %2$s<br><small>%3$s at current rates</small><br>fee %4$s = %5$.2f%%]]></string>
 
-    <string name="txs_view_outside">View on SmartBit site</string>
-    <string name="txs_p2wsh">Contract funding</string>
-
-    <array name="txs_confs">
-        <item><![CDATA[<strong>awaiting&#160;confirmation</strong>]]></item>
-        <item><![CDATA[<strong>%1$s&#160;confirmation</strong>]]></item>
-        <item><![CDATA[<strong>%1$s&#160;confirmations</strong>]]></item>
-    </array>
-
     <string name="send_scan_qr">Scan a QR code</string>
     <string name="send_paste_payment_request"><![CDATA[<strong>Paste Lightning Invoice<br><font color=#999999><small>or Groestlcoin Testnet address</small></font></strong>]]></string>
     <string name="btc_send_title"><![CDATA[<font color=#E68A00><strong>Send Groestlcoin Testnet Transaction</strong></font><br><br>%1$s]]></string>
 
     <string name="ln_send_howto"><![CDATA[
         You are trying to fulfill a Lightning payment request but there are currently no open
-        <a href=https://lightning-wallet.com/using-lightning-wallet#payment-channel>payment channels</a> in this wallet.<br><br>How to fix this?<br><br>
-        - Open an outgoing channel with a peer of your choice, this requires some Testnet Groestlcoins to be present in this wallet as they will be used for funding.<br><br>
-        - <a href=https://www.bitrefill.com/buy/turbo-lightning-channel/>Purchase an incoming channel</a> with an immediately spendable balance on your side.
+        payment channels in this wallet.<br><br>How to fix this?<br><br>
+        - Open an outgoing channel with a peer of your choice, this requires some Testnet Groestlcoins to be present in this wallet as they will be used for funding.
     ]]></string>
 
     <string name="ln_receive_howto"><![CDATA[
-        Receiving off-chain Lightning funds requires you to have at least one <a href=https://lightning-wallet.com/using-lightning-wallet#payment-channel>payment channel</a>. There are two ways to accomplish this:<br><br>
-        1. Open an <i>outgoing channel</i> with a peer of your choice and spend some Lightning funds first to <a href=https://lightning-wallet.com/using-lightning-wallet#receiving-lightning-funds>make room</a> for incoming payments.<br><br>
-        2. <a href=https://www.bitrefill.com/thor-lightning-network-channels>Order</a> an <i>incoming channel</i> which would allow you to receive Lightning payments right away.
+        Receiving off-chain Lightning funds requires you to have at least one payment channel. <br><br>Open an <i>outgoing channel</i> with a peer of your choice and spend some Lightning funds first to make room for incoming payments.
     ]]></string>
 
     <string name="btc_receive_option"><![CDATA[

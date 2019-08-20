@@ -1,14 +1,15 @@
 <resources>
+    <string name="app_name">Groestlcoin Гаманець-Блискавка</string>
     <string name="lang">ukr</string>
     <string name="emerge_report">Показати звіт</string>
     <string name="emerge_mode">Аварійний режим</string>
 
     <!-- app wide -->
     <string name="step_fees"><![CDATA[<font color=#999999>Оберіть комісію</font><br><br>%1$s]]></string>
-    <string name="greetings">Groestlcoin Гаманець-Блискавка\nОзнайомтесь з <a href='http://lightning-wallet.com'>інструкцією</a></string>
+    <string name="greetings">Groestlcoin Гаманець-Блискавка</string>
     <string name="sets_rescan_ok">Зараз гаманець закриється, рескан блокчейну розпочнеться автоматично при наступному запуску</string>
     <string name="boost_details"><![CDATA[Хочете підняти комісію для цієї транзакції щоб підтвердити її швидше?<br><br>зараз %1$s<br>після %2$s]]></string>
-    <string name="mnemonic_info">Мнемонічна фраза важлива!\n<a href="http://lightning-wallet.com/installing-lightning-wallet#mnemonic-code">Прочитайте</a> навіщо вона потрібна\n\n\n<small>Підказка: свайпніть вліво\nщоб відкрити QR сканер</small></string>
+    <string name="mnemonic_info">Мнемонічна фраза важлива!\n навіщо вона потрібна\n\n\n<small>Підказка: свайпніть вліво\nщоб відкрити QR сканер</small></string>
     <string name="fee_risky"><![CDATA[<small>%1$s %2$s<br><small><font color=#999999>Може зайняти кілька годин</font></small></small>]]></string>
     <string name="fee_live"><![CDATA[<small>%1$s %2$s<br><small><font color=#999999>Більш швидке підтвердження</font></small></small>]]></string>
     <string name="search_hint_payments">Пошук платежiв-блискавок</string>
@@ -40,7 +41,7 @@
     </string>
 
     <string name="tokens_warn"><![CDATA[
-        Будь ласка, майте на увазі: цей гаманець використовує <a href=http://lightning-wallet.com/storage-tokens#storage-tokens>платні талони</a>
+        Будь ласка, майте на увазі: цей гаманець використовує платні талони
         для зберігання зашифрованих резервних копій ваших каналів.<br><br>Автоматичний платіж-Блискавка сумою <i>%1$s</i> придбає 50 талонів
         як тільки ви відкриєте перший канал.<br><br>Ці талони захистять вас від випадкової втрати грошей в каналах
     ]]></string>
@@ -53,9 +54,9 @@
 
     <string name="hivemind_details"><![CDATA[
         <Strong>Hivemind deposits are disabled</strong><br><br>
-        It will be possible to deposit funds to Hivemind if <a href="http://www.drivechain.info/">Drivechain</a> soft-fork gets activated.<br><br>
-        <a href="http://bitcoinhivemind.com/">Hivemind</a> is a Peer-to-Peer Oracle Protocol which absorbs accurate data into a blockchain so that Groestlcoin-users can speculate in Prediction Markets.<br><br>
-        These markets have the <a href=http://bitcoinhivemind.com/papers/3_PM_Applications.pdf>potential</a> to revolutionize the emergence and diffusion of knowledge in society.
+        It will be possible to deposit funds to Hivemind if Drivechain soft-fork gets activated.<br><br>
+        Hivemind is a Peer-to-Peer Oracle Protocol which absorbs accurate data into a blockchain so that Groestlcoin-users can speculate in Prediction Markets.<br><br>
+        These markets have the potential to revolutionize the emergence and diffusion of knowledge in society.
     ]]></string>
 
     <!-- Olympus server -->
@@ -170,9 +171,8 @@
 
     <string name="ln_send_howto"><![CDATA[
         Ви намагаєтеся оплатити запит-Блискавку, але в цьому гаманці зараз немає відкритих
-        <a href=https://lightning-wallet.com/using-lightning-wallet#payment-channel>платіжних каналів</a>.<br><br>Що з цим робити?<br><br>
+        платіжних каналів.<br><br>Що з цим робити?<br><br>
         - Відкрийте канал з вузлом на ваш вибір, для наповнення каналу в гаманці мають бути біткоіни.<br><br>
-        - <a href=https://www.bitrefill.com/buy/turbo-lightning-channel/>Купіть вхiдний канал</a> з миттєво доступним витратним балансом.
     ]]></string>
 
 
@@ -180,9 +180,8 @@
     <string name="ln_receive_option"><![CDATA[<font color=#0099FE>Запит-Блискавка</font><small><br><br>%1$s</small>]]></string>
 
     <string name="ln_receive_howto"><![CDATA[
-        Для отримання платежів-Блискавок потрібно мати як мінімум один <a href=https://lightning-wallet.com/using-lightning-wallet#payment-channel>платіжний канал</a>. Відкрити канал можна двома способами:<br><br>
-        1. Відкрийте <i>вихідний канал</i> з обраним вами пiром та спочатку зробіть кілька платежів-Блискавок щоб <a href=https://lightning-wallet.com/using-lightning-wallet#receiving-lightning-funds>звільнити місце</a> для вхідних коштів.<br><br>
-        2. <a href=https://www.bitrefill.com/thor-lightning-network-channels>Замовте</a> <i>вхідний канал</i>, який одразу дозволить вам отримувати платежі-Блискавки.
+        Для отримання платежів-Блискавок потрібно мати як мінімум один платіжний канал. Відкрити канал можна двома способами:<br><br>
+        Відкрийте <i>вихідний канал</i> з обраним вами пiром та спочатку зробіть кілька платежів-Блискавок щоб звільнити місце для вхідних коштів.
     ]]></string>
 
     <string name="ln_receive_6conf"><![CDATA[&#9888; Вхідні платежі-Блискавки поки неможливі тому що ваш пір ще не готовий. Як правило це стається як тільки наповнююча канал Біткоїн-транзакція отримує 6 підтверджень]]></string>
@@ -266,7 +265,7 @@
     <string name="ln_info_status_other"><![CDATA[<font color=#777777>%1$s</font>]]></string>
 
     <string name="ln_chan_close_inflight_details"><![CDATA[&#9888; <font color=#E68A00>В каналі є завислі платежі</font> тому кооперативне закриття буде відкладено поки вони не зникнуть<br><br>Рекомендується не закривати канал прямо зараз, а замість цього дати завислим платежам деякий час, все ще хочете продовжити?]]></string>
-    <string name="ln_chan_force_details"><![CDATA[&#9888; Майте на увазі, що спроба закриття каналу прямо зараз призведе до <a href=http://lightning-wallet.com/using-lightning-wallet#forced-channel-closure>форсованого закриття</a>, на яке піде велика сума комісії і більше часу, все ще хочете продовжити?]]></string>
+    <string name="ln_chan_force_details"><![CDATA[&#9888; Майте на увазі, що спроба закриття каналу прямо зараз призведе до форсованого закриття, на яке піде велика сума комісії і більше часу, все ще хочете продовжити?]]></string>
     <string name="ln_chan_close_confirm_local">Хочете закрити канал і відправити зворотню Біткоїн-транзакцію назад в цей гаманець?</string>
     <string name="ln_chan_close">Зачинити канал</string>
 
@@ -312,7 +311,7 @@
         <item><![CDATA[%1$s відчинених каналов]]></item>
     </array>
 
-    <string name="ln_ops_start_fund_local_title"><![CDATA[<small>Є питання?<br><a href=http://lightning-wallet.com/using-lightning-wallet#using-lightning-wallet>Почитайте про блискавку</a></small><br><br>відчиняється новий канал<br><strong>платить ваш гаманець</strong>]]></string>
+    <string name="ln_ops_start_fund_local_title"><![CDATA[<small>Є питання?<br>Почитайте про блискавку</small><br><br>відчиняється новий канал<br><strong>платить ваш гаманець</strong>]]></string>
     <string name="ln_ops_start_fund_node_view"><![CDATA[<strong>%1$s</strong><br><font color=#999999><i>відчинення каналу</i></font><br>%2$s<br><br><font color=#999999>ID піра</font><br><small>%3$s</small>]]></string>
     <string name="ln_ops_start_node_view"><![CDATA[<strong>%1$s</strong><br>%2$s<br><small><font color=#999999>%3$s</font></small>]]></string>
     <string name="ln_ops_start_fund_incoming_channel">вхідний канал</string>

@@ -1,14 +1,15 @@
 <resources>
+    <string name="app_name">Groestlcoin Кошелек-Молния</string>
     <string name="lang">rus</string>
     <string name="emerge_report">Показать отчет</string>
     <string name="emerge_mode">Аварийный режим</string>
 
     <!-- app wide -->
     <string name="step_fees"><![CDATA[<font color=#999999>Выберите комиссию</font><br><br>%1$s]]></string>
-    <string name="greetings">Groestlcoin Кошелек-Молния\nПрочитайте <a href='http://lightning-wallet.com'>инструкцию</a></string>
+    <string name="greetings">Groestlcoin Кошелек-Молния</string>
     <string name="sets_rescan_ok">Сейчас кошелек закроется, рескан блокчейна начнется автоматически при следующем запуске</string>
     <string name="boost_details"><![CDATA[Хотите поднять комиссию для этой транзакции и подтвердить ее быстрее?<br><br>сейчас %1$s<br>после %2$s<br>]]></string>
-    <string name="mnemonic_info">Мнемонический код важен!\n<a href="http://lightning-wallet.com/installing-lightning-wallet#mnemonic-code">Прочитайте</a> зачем он нужен\n\n\n<small>Подсказка: свайпните влево\nчтобы открыть QR сканер</small></string>
+    <string name="mnemonic_info">Мнемонический код важен!\n>Прочитайте зачем он нужен\n\n\n<small>Подсказка: свайпните влево\nчтобы открыть QR сканер</small></string>
     <string name="fee_risky"><![CDATA[<small>%1$s %2$s<br><small><font color=#999999>Может занять несколько часов</font></small></small>]]></string>
     <string name="fee_live"><![CDATA[<small>%1$s %2$s<br><small><font color=#999999>Более быстрое подтверждение</font></small></small>]]></string>
     <string name="search_hint_payments">Поиск по платежам-молниям</string>
@@ -40,7 +41,7 @@
     </string>
 
     <string name="tokens_warn"><![CDATA[
-        Пожалуйста, учтите: этот кошелек использует <a href=http://lightning-wallet.com/storage-tokens#storage-tokens>платные талоны</a>
+        Пожалуйста, учтите: этот кошелек использует платные талоны
         для хранения зашифрованных бэкапов ваших каналов.<br><br>Автоматический платеж-Молния в сумме <i>%1$s</i> купит 50 талонов
         как только вы откроете первый канал.<br><br>Эти талоны защитят вас от случайной потери денег в каналах
     ]]></string>
@@ -53,9 +54,9 @@
 
     <string name="hivemind_details"><![CDATA[
         <strong>Hivemind deposits are disabled</strong><br><br>
-        It will be possible to deposit funds to Hivemind if <a href="http://www.drivechain.info/">Drivechain</a> soft-fork gets activated.<br><br>
-        <a href="http://bitcoinhivemind.com/">Hivemind</a> is a Peer-to-Peer Oracle Protocol which absorbs accurate data into a blockchain so that Groestlcoin-users can speculate in Prediction Markets.<br><br>
-        These markets have the <a href=http://bitcoinhivemind.com/papers/3_PM_Applications.pdf>potential</a> to revolutionize the emergence and diffusion of knowledge in society.
+        It will be possible to deposit funds to Hivemind if Drivechain soft-fork gets activated.<br><br>
+        Hivemind is a Peer-to-Peer Oracle Protocol which absorbs accurate data into a blockchain so that Groestlcoin-users can speculate in Prediction Markets.<br><br>
+        These markets have the potential to revolutionize the emergence and diffusion of knowledge in society.
     ]]></string>
 
     <!-- Olympus server -->
@@ -170,18 +171,16 @@
 
     <string name="ln_send_howto"><![CDATA[
         Вы пытаетесь оплатить запрос-Молнию, но в кошельке сейчас нет открытых
-        <a href=https://lightning-wallet.com/using-lightning-wallet#payment-channel>платежных каналов</a><br><br>Что с этим делать?<br><br>
+        платежных каналов<br><br>Что с этим делать?<br><br>
         - Откройте платежный канал с узлом на ваш выбор, для наполнения канала в кошельке должны быть биткоины.<br><br>
-        - <a href=https://www.bitrefill.com/buy/turbo-lightning-channel/>Купите входящий канал</a> с мгновенно доступным расходным балансом.
     ]]></string>
 
     <string name="ln_receive_title"><![CDATA[<font color=#0099FE><strong>Создать запрос-Молнию</strong></font>]]></string>
     <string name="ln_receive_option"><![CDATA[<font color=#0099FE>Запрос-Молния</font><small><br><br>%1$s</small>]]></string>
 
     <string name="ln_receive_howto"><![CDATA[
-        Для получения платежей-Молний нужно иметь как минимум один <a href=https://lightning-wallet.com/using-lightning-wallet#payment-channel>платежный канал</a>. Открыть канал можно двумя способами:<br><br>
-        1. Откройте <i>исходящий канал</i> с выбранным вами пиром и сначала сделайте несколько платежей-Молний чтобы <a href=https://lightning-wallet.com/using-lightning-wallet#receiving-lightning-funds>освободить место</a> для входящих средств.<br><br>
-        2. <a href=https://www.bitrefill.com/thor-lightning-network-channels>Закажите</a> <i>входящий канал</i>, который сразу же позволит вам получать платежи-Молнии.
+        Для получения платежей-Молний нужно иметь как минимум одиплатежный канал.<br><br>
+        Откройте <i>исходящий канал</i> с выбранным вами пиром и сначала сделайте несколько платежей-Молний чтобы освободить место для входящих средств.
     ]]></string>
 
     <string name="ln_receive_6conf"><![CDATA[&#9888; Входящие платежи-Молнии пока невозможны потому что ваш пир еще не готов. Как правило пиры становятся готовы как только наполняющая канал Биткоин-транзакция получает 6 подтверждений]]></string>
@@ -265,7 +264,7 @@
     <string name="ln_info_status_other"><![CDATA[<font color=#777777>%1$s</font>]]></string>
 
     <string name="ln_chan_close_inflight_details"><![CDATA[&#9888; <font color=#E68A00>В канале есть зависшие платежи</font> поэтому кооперативное закрытие будет отложено пока они не исчезнут<br><br>Рекомендуется не закрывать канал прямо сейчас, а вместо этого дать зависшим платежам некоторое время, все еще хотите продолжить?]]></string>
-    <string name="ln_chan_force_details"><![CDATA[&#9888; Учтите, что попытка закрытия канала прямо сейчас приведет к <a href=http://lightning-wallet.com/using-lightning-wallet#forced-channel-closure>форсированному закрытию</a>, на которое уйдет большая сумма комиссии и больше времени, все еще хотите продолжить?]]></string>
+    <string name="ln_chan_force_details"><![CDATA[&#9888; Учтите, что попытка закрытия канала прямо сейчас приведет к channel-closure>форсированному закрытию</a>, на которое уйдет большая сумма комиссии и больше времени, все еще хотите продолжить?]]></string>
     <string name="ln_chan_close_confirm_local">Хотите закрыть канал и отправить возвратную Биткоин-транзакцию обратно в этот кошелек?</string>
     <string name="ln_chan_close">Закрыть канал</string>
 
@@ -311,7 +310,7 @@
         <item><![CDATA[%1$s открытых каналов]]></item>
     </array>
 
-    <string name="ln_ops_start_fund_local_title"><![CDATA[<small>Есть вопросы?<br><a href=http://lightning-wallet.com/using-lightning-wallet#using-lightning-wallet>Почитайте про молнию</a></small><br><br>открытие нового канала<br><strong>платит ваш кошелек</strong>]]></string>
+    <string name="ln_ops_start_fund_local_title"><![CDATA[<small>Есть вопросы?<br>Почитайте про молнию</small><br><br>открытие нового канала<br><strong>платит ваш кошелек</strong>]]></string>
     <string name="ln_ops_start_fund_node_view"><![CDATA[<strong>%1$s</strong><br><font color=#999999><i>открытие канала</i></font><br>%2$s<br><br><font color=#999999>ID пира</font><br><small>%3$s</small>]]></string>
     <string name="ln_ops_start_node_view"><![CDATA[<strong>%1$s</strong><br>%2$s<br><small><font color=#999999>%3$s</font></small>]]></string>
     <string name="ln_ops_start_fund_incoming_channel">входящий канал</string>
