@@ -7,6 +7,9 @@ buildscript {
     dependencies {
         classpath 'com.android.tools.build:gradle:2.3.0'
         classpath 'com.github.xingda920813:gradle-android-scala-plugin:android-gradle-2.3.0'
+        classpath('fr.avianey.androidsvgdrawable:gradle-plugin:3.0.2') {
+            exclude group: 'xerces'
+        }
     }
 }
 

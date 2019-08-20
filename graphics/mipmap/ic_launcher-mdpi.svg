@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="48"
+   height="48"
+   viewBox="0 0 12.7 12.7"
+   version="1.1"
+   id="svg6414"
+   sodipodi:docname="ic_launcher-mdpi.svg"
+   inkscape:export-filename="C:\Users\HashEngineering\Documents\HashEngineering\Groestlcoin\lnwallet\app\src\main\res\mipmap-xxxhdpi\ic_launcher_round.png"
+   inkscape:export-xdpi="101.6"
+   inkscape:export-ydpi="101.6"
+   inkscape:version="0.92.3 (2405546, 2018-03-11)">
+  <defs
+     id="defs6408">
+    <linearGradient
+       id="SVGID_8_"
+       gradientUnits="userSpaceOnUse"
+       x1="189.35361"
+       y1="444.06921"
+       x2="41.079399"
+       y2="295.79501">
+      <stop
+         offset="0"
+         style="stop-color:#377F94"
+         id="stop69" />
+      <stop
+         offset="1"
+         style="stop-color:#34ADC4"
+         id="stop71" />
+    </linearGradient>
+    <linearGradient
+       id="SVGID_9_"
+       gradientUnits="userSpaceOnUse"
+       x1="22.5301"
+       y1="416.7908"
+       x2="142.0043"
+       y2="297.3165">
+      <stop
+         offset="0"
+         style="stop-color:#00A5BD"
+         id="stop76" />
+      <stop
+         offset="1"
+         style="stop-color:#005E78"
+         id="stop78" />
+    </linearGradient>
+    <linearGradient
+       id="SVGID_10_"
+       gradientUnits="userSpaceOnUse"
+       x1="76.497398"
+       y1="460.7247"
+       x2="210.47729"
+       y2="326.74481">
+      <stop
+         offset="0"
+         style="stop-color:#00A5BD"
+         id="stop83" />
+      <stop
+         offset="1"
+         style="stop-color:#005E78"
+         id="stop85" />
+    </linearGradient>
+    <linearGradient
+       id="SVGID_11_"
+       gradientUnits="userSpaceOnUse"
+       x1="9.8774996"
+       y1="219.1451"
+       x2="220.5555"
+       y2="8.4671001">
+      <stop
+         offset="0"
+         style="stop-color:#00A5BD"
+         id="stop96" />
+      <stop
+         offset="1"
+         style="stop-color:#005E78"
+         id="stop98" />
+    </linearGradient>
+    <linearGradient
+       id="SVGID_12_"
+       gradientUnits="userSpaceOnUse"
+       x1="-22.0182"
+       y1="175.0341"
+       x2="123.876"
+       y2="29.1399">
+      <stop
+         offset="0"
+         style="stop-color:#00A5BD"
+         id="stop103" />
+      <stop
+         offset="1"
+         style="stop-color:#005E78"
+         id="stop105" />
+    </linearGradient>
+    <linearGradient
+       id="SVGID_13_"
+       gradientUnits="userSpaceOnUse"
+       x1="79.7873"
+       y1="226.1736"
+       x2="253.1291"
+       y2="52.831799">
+      <stop
+         offset="0"
+         style="stop-color:#00A5BD"
+         id="stop110" />
+      <stop
+         offset="1"
+         style="stop-color:#005E78"
+         id="stop112" />
+    </linearGradient>
+  </defs>
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="1.0283505"
+     inkscape:cx="-165.26885"
+     inkscape:cy="27.821728"
+     inkscape:document-units="px"
+     inkscape:current-layer="layer1"
+     showgrid="false"
+     inkscape:window-width="1920"
+     inkscape:window-height="1001"
+     inkscape:window-x="-9"
+     inkscape:window-y="-9"
+     inkscape:window-maximized="1"
+     units="px" />
+  <metadata
+     id="metadata6411">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(0,-284.3)">
+    <g
+       transform="matrix(0.05650807,0,0,0.05650807,-0.16255496,284.21656)"
+       id="g119">
+      <rect
+         x="9.8999996"
+         y="8.5"
+         class="st12"
+         width="210.7"
+         height="210.7"
+         id="rect94"
+         style="opacity:0.6;fill:#fcfcfc" />
+      <linearGradient
+         id="linearGradient7033"
+         gradientUnits="userSpaceOnUse"
+         x1="9.8774996"
+         y1="219.1451"
+         x2="220.5555"
+         y2="8.4671001">
+        <stop
+           offset="0"
+           style="stop-color:#00A5BD"
+           id="stop7029" />
+        <stop
+           offset="1"
+           style="stop-color:#005E78"
+           id="stop7031" />
+      </linearGradient>
+      <rect
+         x="9.8999996"
+         y="8.5"
+         class="st13"
+         width="210.7"
+         height="210.7"
+         id="rect101"
+         style="opacity:0.4;fill:url(#SVGID_11_)" />
+      <g
+         id="g117">
+        <linearGradient
+           id="linearGradient7040"
+           gradientUnits="userSpaceOnUse"
+           x1="-22.0182"
+           y1="175.0341"
+           x2="123.876"
+           y2="29.1399">
+          <stop
+             offset="0"
+             style="stop-color:#00A5BD"
+             id="stop7036" />
+          <stop
+             offset="1"
+             style="stop-color:#005E78"
+             id="stop7038" />
+        </linearGradient>
+        <polygon
+           class="st14"
+           points="16.4,213.5 61.3,213.5 100.1,121.6 56.1,121.6 109.5,14.8 16.4,14.8 "
+           id="polygon108"
+           style="fill:url(#SVGID_12_)" />
+        <linearGradient
+           id="linearGradient7047"
+           gradientUnits="userSpaceOnUse"
+           x1="79.7873"
+           y1="226.1736"
+           x2="253.1291"
+           y2="52.831799">
+          <stop
+             offset="0"
+             style="stop-color:#00A5BD"
+             id="stop7043" />
+          <stop
+             offset="1"
+             style="stop-color:#005E78"
+             id="stop7045" />
+        </linearGradient>
+        <polygon
+           class="st15"
+           points="215.1,213.5 215.1,14.8 168.6,14.8 124.9,83.5 176.5,83.5 67.1,213.5 "
+           id="polygon115"
+           style="fill:url(#SVGID_13_)" />
+      </g>
+    </g>
+  </g>
+</svg>

@@ -1,5 +1,7 @@
 apply plugin: "com.android.application"
 apply plugin: "jp.leafytree.android-scala"
+apply plugin: 'androidsvgdrawable'
+
 
 android {
     compileSdkVersion 28
@@ -78,4 +80,36 @@ dependencies {
     compile ('org.slf4j:slf4j-simple:1.7.25') {
         exclude module: 'slf4j-api'
     }
+}
+
+task svgToPngMipmap(type: fr.avianey.androidsvgdrawable.gradle.SvgDrawableTask) {
+    from = files('../graphics/mipmap')
+    to = file('src/main/res')
+    targetedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']
+    outputFormat = 'PNG'
+    outputType = 'mipmap'
+}
+
+task svgToPngMipmapTestnet(type: fr.avianey.androidsvgdrawable.gradle.SvgDrawableTask) {
+    from = files('../graphics/mipmap-testnet')
+    to = file('src/testnet/res')
+    targetedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']
+    outputFormat = 'PNG'
+    outputType = 'mipmap'
+}
+
+task svgToPngMipmapDrawable(type: fr.avianey.androidsvgdrawable.gradle.SvgDrawableTask) {
+    from = files('../graphics/drawable')
+    to = file('src/main/res')
+    targetedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']
+    outputFormat = 'PNG'
+    outputType = 'drawable'
+}
+
+task svgToPngMipmapDrawableTestnet(type: fr.avianey.androidsvgdrawable.gradle.SvgDrawableTask) {
+    from = files('../graphics/drawable-testnet')
+    to = file('src/testnet/res')
+    targetedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']
+    outputFormat = 'PNG'
+    outputType = 'drawable'
 }
