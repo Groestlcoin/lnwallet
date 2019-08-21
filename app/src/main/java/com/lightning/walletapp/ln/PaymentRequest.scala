@@ -121,12 +121,12 @@ case class PaymentRequest(prefix: String, amount: Option[MilliSatoshi], timestam
   lazy val routingInfo = tags.collect { case r: RoutingInfoTag => r }
 
   lazy val fallbackAddress = tags.collectFirst {
-    case FallbackAddressTag(17, hash) if prefix == "lnbc" => Base58Check.encode(Base58.Prefix.PubkeyAddress, hash)
-    case FallbackAddressTag(18, hash) if prefix == "lnbc" => Base58Check.encode(Base58.Prefix.ScriptAddress, hash)
-    case FallbackAddressTag(17, hash) if prefix == "lntb" || prefix == "lnbcrt" => Base58Check.encode(Base58.Prefix.PubkeyAddressTestnet, hash)
-    case FallbackAddressTag(18, hash) if prefix == "lntb" || prefix == "lnbcrt" => Base58Check.encode(Base58.Prefix.ScriptAddressTestnet, hash)
-    case FallbackAddressTag(version, hash) if prefix == "lntb" || prefix == "lnbcrt" => Bech32.encodeWitnessAddress("tb", version, hash)
-    case FallbackAddressTag(version, hash) if prefix == "lnbc" => Bech32.encodeWitnessAddress("bc", version, hash)
+    case FallbackAddressTag(17, hash) if prefix == "lngrs" => Base58Check.encode(Base58.Prefix.PubkeyAddress, hash)
+    case FallbackAddressTag(18, hash) if prefix == "lngrs" => Base58Check.encode(Base58.Prefix.ScriptAddress, hash)
+    case FallbackAddressTag(17, hash) if prefix == "lntgrs" || prefix == "lngrsrt" => Base58Check.encode(Base58.Prefix.PubkeyAddressTestnet, hash)
+    case FallbackAddressTag(18, hash) if prefix == "lntgrs" || prefix == "lngrsrt" => Base58Check.encode(Base58.Prefix.ScriptAddressTestnet, hash)
+    case FallbackAddressTag(version, hash) if prefix == "lntgrs" || prefix == "lngrsrt" => Bech32.encodeWitnessAddress("tgrs", version, hash)
+    case FallbackAddressTag(version, hash) if prefix == "lngrs" => Bech32.encodeWitnessAddress("grs", version, hash)
   }
 
   def isFresh: Boolean = {
@@ -160,9 +160,9 @@ object PaymentRequest {
   val expiryTag = ExpiryTag(3600 * 24 + 1)
 
   val prefixes =
-    Map(Block.RegtestGenesisBlock.hash -> "lnbcrt",
-      Block.TestnetGenesisBlock.hash -> "lntb",
-      Block.LivenetGenesisBlock.hash -> "lnbc")
+    Map(Block.RegtestGenesisBlock.hash -> "lngrsrt",
+      Block.TestnetGenesisBlock.hash -> "lntgrs",
+      Block.LivenetGenesisBlock.hash -> "lngrs")
 
   def apply(chain: ByteVector, amount: Option[MilliSatoshi], paymentHash: ByteVector,
             privKey: PrivateKey, description: String, fallbackAddress: Option[String],
