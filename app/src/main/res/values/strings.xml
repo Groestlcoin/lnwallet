@@ -10,7 +10,7 @@
     <string name="greetings">Groestlcoin Lightning Wallet</string>
     <string name="boost_details"><![CDATA[Would you like to raise a fee for this transaction and thus get it confirmed faster?<br><br>current %1$s<br>raised %2$s<br>]]></string>
     <string name="mnemonic_info">Mnemonic phrase is important!\nSave it now\n\n\n<small>swipe screen to the left\nto open a QR scanner</small></string>
-    <string name="fee_risky"><![CDATA[<small>%1$s %2$s<br><small><font color=#999999>Confirmation may take hours</font></small></small>]]></string>
+    <string name="fee_risky"><![CDATA[<small>%1$s %2$s<br><small><font color=#999999>Confirmation may take minutes</font></small></small>]]></string>
     <string name="fee_live"><![CDATA[<small>%1$s %2$s<br><small><font color=#999999>Faster confirmation times</font></small></small>]]></string>
     <string name="search_hint_payments">Lightning payment search</string>
     <string name="copied_to_clipboard">Copied «%1$s»</string>
