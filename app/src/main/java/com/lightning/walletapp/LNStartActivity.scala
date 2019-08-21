@@ -129,7 +129,10 @@ class FragLNStart extends Fragment with SearchBar with HumanTimeDisplay { me =>
 
 // DISPLAYING NODES ON UI
 
-sealed trait StartNodeView { def asString(base: String): String }
+sealed trait StartNodeView {
+  def asString(base: String): String
+}
+
 case class IncomingChannelParams(nodeView: HardcodedNodeView, open: OpenChannel)
 case class HardcodedNodeView(ann: NodeAnnouncement, tip: String) extends StartNodeView {
   // App suggests a bunch of hardcoded and separately fetched nodes with a good liquidity
@@ -161,8 +164,16 @@ sealed trait LNUrlData {
   val callback: String
 }
 
-case class WithdrawRequest(callback: String, k1: String, maxWithdrawable: Long, defaultDescription: String) extends LNUrlData
-case class IncomingChannelRequest(uri: String, callback: String, k1: String, capacity: Long, push: Long) extends LNUrlData {
+case class WithdrawRequest(callback: String, k1: String,
+                           maxWithdrawable: Long, defaultDescription: String,
+                           minWithdrawable: Option[Long] = None) extends LNUrlData {
+
+  val minCanReceive = minWithdrawable getOrElse 1L
+  require(minCanReceive >= 1L, "minCanReceive is too low")
+  require(minCanReceive <= maxWithdrawable, "minCanReceive is too high")
+}
+
+case class IncomingChannelRequest(uri: String, callback: String, k1: String) extends LNUrlData {
   def resolveAnnounce = app.mkNodeAnnouncement(PublicKey(ByteVector fromValidHex key), NodeAddress.fromParts(host, port.toInt), host)
   def requestChannel = unsafe(s"$callback?k1=$k1&remoteid=${LNParams.nodePublicKey.toString}&private=1")
   val nodeLink(key, host, port) = uri

@@ -1,12 +1,13 @@
 package com.lightning.walletapp.ln.wire
 
+import com.lightning.walletapp.ln._
+import com.softwaremill.quicklens._
 import com.lightning.walletapp.ln.Tools._
 import com.lightning.walletapp.ln.wire.LightningMessageCodecs._
 
 import fr.acinq.bitcoin.{Crypto, MilliSatoshi, Satoshi}
-import fr.acinq.bitcoin.Crypto.{Point, PublicKey, Scalar}
+import fr.acinq.bitcoin.Crypto.{Point, PrivateKey, PublicKey, Scalar}
 import java.net.{Inet4Address, Inet6Address, InetAddress, InetSocketAddress}
-import com.lightning.walletapp.ln.{Features, HasCommitments, LightningException}
 import com.lightning.walletapp.lnutils.olympus.OlympusWrap.StringVec
 import fr.acinq.eclair.UInt64
 import scodec.bits.ByteVector
@@ -49,13 +50,18 @@ case class FundingSigned(channelId: ByteVector, signature: ByteVector) extends C
 
 // CHANNEL MESSAGES
 
-case class FundingLocked(channelId: ByteVector, nextPerCommitmentPoint: Point) extends ChannelMessage
 case class ClosingSigned(channelId: ByteVector, feeSatoshis: Long, signature: ByteVector) extends ChannelMessage
-case class Shutdown(channelId: ByteVector, scriptPubKey: ByteVector) extends ChannelMessage
+case class FundingLocked(channelId: ByteVector, nextPerCommitmentPoint: Point) extends ChannelMessage { me =>
+  def some = Some(me)
+}
 
-case class UpdateAddHtlc(channelId: ByteVector, id: Long,
-                         amountMsat: Long, paymentHash: ByteVector, expiry: Long,
-                         onionRoutingPacket: ByteVector) extends ChannelMessage {
+case class Shutdown(channelId: ByteVector, scriptPubKey: ByteVector) extends ChannelMessage { me =>
+  def some = Some(me)
+}
+
+case class UpdateAddHtlc(channelId: ByteVector,
+                         id: Long, amountMsat: Long, paymentHash: ByteVector, expiry: Long,
+                         onionRoutingPacket: OnionRoutingPacket) extends ChannelMessage {
 
   lazy val hash160: ByteVector = Crypto ripemd160 paymentHash
   lazy val amount: MilliSatoshi = MilliSatoshi(amountMsat)
@@ -74,7 +80,9 @@ case class RevokeAndAck(channelId: ByteVector, perCommitmentSecret: Scalar, next
 
 case class Error(channelId: ByteVector, data: ByteVector) extends ChannelMessage {
   def exception = new LightningException(reason = s"Remote channel message\n\n$text")
+  lazy val taggedText = bin2readable(data.drop(2).toArray)
   lazy val text = bin2readable(data.toArray)
+  lazy val tag = data.take(2)
 }
 
 case class ChannelReestablish(channelId: ByteVector, nextLocalCommitmentNumber: Long,
@@ -116,6 +124,9 @@ case class Hop(nodeId: PublicKey, shortChannelId: Long,
   lazy val humanDetails = s"Node ID: $nodeId, Channel ID: $shortChannelId, Expiry: $cltvExpiryDelta blocks, Routing fees: $feeBreakdown"
 }
 
+case class QueryChannelRange(chainHash: ByteVector, firstBlockNum: Long, numberOfBlocks: Long) extends RoutingMessage
+case class GossipTimestampFilter(chainHash: ByteVector, firstTimestamp: Long, timestampRange: Long) extends RoutingMessage
+
 // NODE ADDRESS HANDLING
 
 case class NodeAnnouncement(signature: ByteVector, features: ByteVector, timestamp: Long,
@@ -130,6 +141,7 @@ case class NodeAnnouncement(signature: ByteVector, features: ByteVector, timesta
 
   val identifier = (alias + nodeId.toString).toLowerCase
   val asString = s"<strong>${alias take 16}</strong><br><small>$pretty</small>"
+  lazy val hostedChanId = Tools.hostedChanId(LNParams.nodePublicKey.toBin, nodeId.toBin)
 }
 
 sealed trait NodeAddress { def canBeUpdatedIfOffline: Boolean }
@@ -184,9 +196,45 @@ case object NodeAddress {
   }
 }
 
+// Hosted channel messages
+
+trait HostedChannelMessage extends LightningMessage
+
+case class InvokeHostedChannel(chainHash: ByteVector, scriptPubKey: ByteVector) extends HostedChannelMessage
+
+case class InitHostedChannel(maxHtlcValueInFlightMsat: UInt64,
+                             htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, channelCapacitySatoshis: Long,
+                             liabilityDeadlineBlockdays: Int, minimalOnchainRefundAmountSatoshis: Long,
+                             initialClientBalanceSatoshis: Long) extends HostedChannelMessage
+
+case class LastCrossSignedState(lastRefundScriptPubKey: ByteVector,
+                                initHostedChannel: InitHostedChannel, lastClientStateUpdate: StateUpdate,
+                                lastHostStateUpdate: StateUpdate) extends HostedChannelMessage
+
+case class StateOverride(updatedClientBalanceSatoshis: Long,
+                         blockDay: Long, clientUpdatesSoFar: Long = 0L, hostUpdatesSoFar: Long = 0L,
+                         nodeSignature: ByteVector = ByteVector.empty) extends HostedChannelMessage {
+
+  def rewind(hc: HostedCommits) =
+    hc.copy(clientChanges = Vector.empty, hostChanges = Vector.empty, reSentUpdates = 0,
+      clientUpdatesSoFar = clientUpdatesSoFar, hostUpdatesSoFar = hostUpdatesSoFar)
+
+  def isBehind(that: StateOverride) =
+    clientUpdatesSoFar < that.clientUpdatesSoFar ||
+      hostUpdatesSoFar < that.hostUpdatesSoFar
+}
+
+case class StateUpdate(stateOverride: StateOverride, inFlightHtlcs: List[HTLCTuple] = Nil) extends HostedChannelMessage { me =>
+  def signed(channelId: ByteVector, refundScriptPubKey: ByteVector, init: InitHostedChannel, priv: PrivateKey): StateUpdate =
+    me.modify(_.stateOverride.nodeSignature) setTo sign(hostedSigHash(channelId, refundScriptPubKey, me, init), priv)
+
+  def verify(channelId: ByteVector, refundScriptPubKey: ByteVector, init: InitHostedChannel, pub: PublicKey): Boolean =
+    Crypto.verifySignature(hostedSigHash(channelId, refundScriptPubKey, me, init), stateOverride.nodeSignature, pub)
+}
+
 // Not in a spec
 case class OutRequest(sat: Long, badNodes: Set[String], badChans: Set[Long], from: Set[String], to: String)
 case class WalletZygote(v: Int, db: ByteVector, wallet: ByteVector, chain: ByteVector)
 case class CerberusPayload(payloads: Vector[AESZygote], halfTxIds: StringVec)
 case class AESZygote(v: Int, iv: ByteVector, ciphertext: ByteVector)
-case class GDriveBackup(chans: Vector[HasCommitments], v: Int)
+case class GDriveBackup(chans: Vector[HasNormalCommits], v: Int)

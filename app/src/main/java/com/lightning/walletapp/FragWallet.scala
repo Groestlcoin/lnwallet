@@ -10,10 +10,10 @@ import com.lightning.walletapp.lnutils._
 import com.lightning.walletapp.R.string._
 import com.lightning.walletapp.FragWallet._
 import com.lightning.walletapp.R.drawable._
-import com.lightning.walletapp.ln.Channel._
 import com.lightning.walletapp.ln.LNParams._
 import com.lightning.walletapp.Denomination._
 import com.lightning.walletapp.ln.PaymentInfo._
+import com.lightning.walletapp.ln.NormalChannel._
 import com.lightning.walletapp.lnutils.ImplicitConversions._
 import com.lightning.walletapp.ln.Tools.{none, random, runAnd, wrap}
 import com.lightning.walletapp.helper.{ReactLoader, RichCursor}
@@ -56,8 +56,8 @@ class FragWallet extends Fragment {
 }
 
 class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar with HumanTimeDisplay { me =>
-  import host.{TxProcessor, mkCheckForm, <, mkCheckFormNeutral, updateView2Blue, baseTextBuilder, getSupportActionBar}
   import host.{UITask, onButtonTap, showForm, negBuilder, baseBuilder, negTextBuilder, str2View, onTap, onFail, rm}
+  import host.{TxProcessor, mkCheckForm, <, mkCheckFormNeutral, getSupportActionBar}
 
   val lnStatus = frag.findViewById(R.id.lnStatus).asInstanceOf[TextView]
   val lnBalance = frag.findViewById(R.id.lnBalance).asInstanceOf[TextView]
@@ -73,15 +73,13 @@ class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar w
 
   val allTxsWrapper = host.getLayoutInflater.inflate(R.layout.frag_toggler, null)
   val toggler = allTxsWrapper.findViewById(R.id.toggler).asInstanceOf[ImageButton]
-  val expiryLeft = app.getResources getStringArray R.array.ln_status_expiry
   val txsConfs = app.getResources getStringArray R.array.txs_confs
-  val imageMap = Array(await, await, conf1, dead, frozen)
-
-  // LISTENERS
+  // 0 is unsent payment, 4 is former frozen payment, now waiting
+  val iconDict = Array(await, await, conf1, dead, await)
 
   val blocksTitleListener = new BlocksListener {
     def onBlocksDownloaded(peer: Peer, block: Block, fb: FilteredBlock, left: Int) =
-      if (left % broadcaster.blocksPerDay == 0) updTitleTask.run
+      if (left % blocksPerDay == 0) updTitleTask.run
   }
 
   val peersListener = new PeerConnectedEventListener with PeerDisconnectedEventListener {
@@ -96,62 +94,15 @@ class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar w
     override def txConfirmed(txj: Transaction) = UITask(adapter.notifyDataSetChanged).run
   }
 
-  // To fight spamming
-  private[this] var errorLimit = 5
-  val chanListener = new ChannelListener {
-    def informOfferClose(chan: Channel, message: String) = UITask {
-      val bld = baseBuilder(chan.data.announce.asString.html, message)
-      def close(alert: AlertDialog) = rm(alert)(chan process ChannelManager.CMDLocalShutdown)
-      mkCheckFormNeutral(_.dismiss, none, close, bld, dialog_ok, -1, ln_chan_close)
-    }
-
-    override def onSettled(chan: Channel, cs: Commitments) =
-      if (cs.localCommit.spec.fulfilledIncoming.nonEmpty)
-        host stopService host.foregroundServiceIntent
-
-    override def onProcessSuccess = {
-      case (chan, _: HasCommitments, remoteError: wire.Error) if errorLimit > 0 =>
-        // Peer has sent us an error, display details to user and offer force-close
-        informOfferClose(chan, remoteError.exception.getMessage).run
-        errorLimit -= 1
-
-      case (chan, _: NormalData, cr: ChannelReestablish) if cr.myCurrentPerCommitmentPoint.isEmpty =>
-        // Peer was OK but now has incompatible features, display details to user and offer force-close
-        val msg = host getString err_ln_peer_incompatible format chan.data.announce.alias
-        informOfferClose(chan, msg).run
-    }
-
-    override def onBecome = {
-      case (_, _, prev, SLEEPING) if prev != SLEEPING => updTitleTask.run
-      case (_, _, prev, OPEN) if prev != OPEN => updTitleTask.run
-    }
-
-    override def onException = {
-      case _ \ CMDAddImpossible(rd, code) =>
-        // Remove this payment from unsent since it was not accepted by channel
-        UITask(host showForm negTextBuilder(dialog_ok, app getString code).create).run
-        PaymentInfoWrap failOnUI rd
-
-      case chan \ HTLCHasExpired(_, htlc) =>
-        val paymentHash = htlc.add.paymentHash.toHex
-        val bld = negTextBuilder(dialog_ok, app.getString(err_ln_expired).format(paymentHash).html)
-        UITask(host showForm bld.setCustomTitle(chan.data.announce.asString.html).create).run
-
-      case chan \ internalException =>
-        val bld = negTextBuilder(dialog_ok, UncaughtHandler toText internalException)
-        UITask(host showForm bld.setCustomTitle(chan.data.announce.asString.html).create).run
-    }
-  }
-
   val loaderCallbacks = new LoaderCallbacks[Cursor] {
     def onCreateLoader(id: Int, bn: Bundle) = new ReactLoader[PaymentInfo](host) {
-      val consume = (vec: InfoVec) => runAnd(lnItems = vec map LNWrap)(updPaymentList.run)
-      def getCursor = if (lastQuery.isEmpty) bag.byRecent else bag byQuery lastQuery
-      def createItem(rc: RichCursor) = bag toPaymentInfo rc
+      val consume = (payments: PaymentInfoVec) => runAnd(lnItems = payments map LNWrap)(updPaymentList.run)
+      def getCursor = if (lastQuery.isEmpty) PaymentInfoWrap.byRecent else PaymentInfoWrap.byQuery(lastQuery)
+      def createItem(rc: RichCursor) = PaymentInfoWrap.toPaymentInfo(rc)
     }
 
     type LoaderCursor = Loader[Cursor]
-    type InfoVec = Vector[PaymentInfo]
+    type PaymentInfoVec = Vector[PaymentInfo]
     def onLoaderReset(loaderCursor: LoaderCursor) = none
     def onLoadFinished(loaderCursor: LoaderCursor, c: Cursor) = none
   }
@@ -174,20 +125,16 @@ class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar w
     val online = viable.count(chan => OPEN == chan.state)
     val delta = viable.size - online
 
-    val lnTotalSum = MilliSatoshi(viable.map { chan =>
-      // Here we seek for total refundable amount which is not affected by on-chain fee changes
-      chan.hasCsOr(data => Commitments.latestRemoteCommit(data.commitments).spec.toRemoteMsat, 0L)
-    }.sum)
-
     val btcTotalSum = coin2MSat(app.kit.conf0Balance)
-    val btcFunds = if (btcTotalSum.isZero) btcEmpty else denom parsedWithSign btcTotalSum
+    val btcFunds = if (btcTotalSum.amount == 0L) btcEmpty else denom parsedWithSign btcTotalSum
+    val lnTotalSum = MilliSatoshi(viable.flatMap(_.getCommits).map(_.myFullBalanceMsat).sum)
     val lnFunds = if (lnTotalSum.amount < 1) lnEmpty else denom parsedWithSign lnTotalSum
     val perOneBtcRate = formatFiat.format(msatInFiat(oneBtc) getOrElse 0L)
 
     val btcSubtitleText =
-      if (app.kit.peerGroup.numConnectedPeers < 1) btcStatusConnecting
-      else if (ChannelManager.currentBlocksLeft < broadcaster.blocksPerDay) btcStatusOperational
-      else app.plur1OrZero(btcSyncInfo, ChannelManager.currentBlocksLeft / broadcaster.blocksPerDay)
+      if (ChannelManager.currentBlocksLeft.isEmpty) btcStatusConnecting
+      else if (ChannelManager.blockDaysLeft <= 1) btcStatusOperational
+      else app.plur1OrZero(btcSyncInfo, ChannelManager.blockDaysLeft)
 
     val lnSubtitleText =
       if (delta == 0 && viable.size == 1) lnStatusOperationalOne
@@ -204,19 +151,65 @@ class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar w
 
   // DISPLAYING ITEMS LIST
 
-  var fundTxIds: Set[String] = Set.empty[String]
-  var lnItems: Vector[LNWrap] = Vector.empty[LNWrap]
-  var btcItems: Vector[BTCWrap] = Vector.empty[BTCWrap]
-  var allItems: Vector[ItemWrap] = Vector.empty[ItemWrap]
+  var errorLimit = 5
+  var fundTxIds = Set.empty[String]
+  var lnItems = Vector.empty[LNWrap]
+  var btcItems = Vector.empty[BTCWrap]
+  var allItems = Vector.empty[ItemWrap]
+  var revealedPreimages = Set.empty[ByteVector]
   val minLinesNum = 4 max IconGetter.scrHeight.ceil.toInt
   var currentCut = minLinesNum
+
+  val chanListener = new ChannelListener {
+    def informOfferClose(chan: NormalChannel, msg: String) = UITask {
+      mkCheckFormNeutral(_.dismiss, none, alert => rm(alert)(chan process ChannelManager.CMDLocalShutdown),
+        baseBuilder(chan.data.announce.asString.html, msg), dialog_ok, noResource = -1, ln_chan_close)
+    }
+
+    override def onSettled(cs: Commitments) =
+      if (cs.localSpec.fulfilledIncoming.nonEmpty)
+        host stopService host.foregroundServiceIntent
+
+    override def onProcessSuccess = {
+      case (chan: NormalChannel, _: HasNormalCommits, remoteError: wire.Error) if errorLimit > 0 =>
+        // Peer has sent us an error, display details to user and offer to force-close a channel
+        informOfferClose(chan, remoteError.text).run
+        errorLimit -= 1
+
+      case (chan: NormalChannel, _: NormalData, cr: ChannelReestablish) if cr.myCurrentPerCommitmentPoint.isEmpty =>
+        // Peer now has some incompatible features, display details to user and offer to force-close a channel
+        informOfferClose(chan, host getString err_ln_peer_incompatible format chan.data.announce.alias).run
+
+      case (_, _, cmd: CMDFulfillHtlc) =>
+        revealedPreimages += cmd.preimage
+        updPaymentList.run
+    }
+
+    override def onBecome = {
+      case (_, _, fromState, CLOSING) if fromState != CLOSING => updPaymentList.run
+      case (_, _, fromState, SUSPENDED) if fromState != SUSPENDED => updTitleTask.run
+      case (_, _, prev, SLEEPING) if prev != SLEEPING => updTitleTask.run
+      case (_, _, prev, OPEN) if prev != OPEN => updTitleTask.run
+    }
+
+    override def onException = {
+      case _ \ CMDAddImpossible(rd, code) =>
+        // Remove this payment from unsent since it was not accepted by channel
+        UITask(host showForm negTextBuilder(dialog_ok, app getString code).create).run
+        PaymentInfoWrap failOnUI rd
+
+      case chan \ internalException =>
+        val bld = negTextBuilder(dialog_ok, UncaughtHandler toText internalException)
+        UITask(host showForm bld.setCustomTitle(chan.data.announce.asString.html).create).run
+    }
+  }
 
   def updPaymentList = UITask {
     TransitionManager beginDelayedTransition mainWrap
     val delayedWraps = ChannelManager.delayedPublishes map ShowDelayedWrap
-    val tempItems = if (isSearching) lnItems else delayedWraps ++ btcItems ++ lnItems
-    allItems = tempItems.sortBy(_.getDate)(Ordering[java.util.Date].reverse) take 48
-    fundTxIds = ChannelManager.all.map(_.fundTxId.toHex).toSet
+    val tempItemWraps = if (isSearching) lnItems else delayedWraps ++ btcItems ++ lnItems
+    fundTxIds = ChannelManager.all.collect { case nc: NormalChannel => nc.fundTxId.toHex }.toSet
+    allItems = tempItemWraps.sortBy(_.getDate)(Ordering[java.util.Date].reverse) take 48
     adapter.notifyDataSetChanged
     updTitleTask.run
 
@@ -235,13 +228,13 @@ class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar w
     def getView(position: Int, savedView: View, parent: ViewGroup) = {
       val resource = if (isTablet) R.layout.frag_tx_line_tablet else R.layout.frag_tx_line
       val view = if (null == savedView) host.getLayoutInflater.inflate(resource, null) else savedView
-      val holder = if (null == view.getTag) new ViewHolder(view) else view.getTag.asInstanceOf[ViewHolder]
+      val holder = if (null == view.getTag) ViewHolder(view) else view.getTag.asInstanceOf[ViewHolder]
       getItem(position) fillView holder
       view
     }
   }
 
-  class ViewHolder(view: View) {
+  case class ViewHolder(view: View) {
     val transactCircle = view.findViewById(R.id.transactCircle).asInstanceOf[ImageView]
     val transactWhen = view.findViewById(R.id.transactWhen).asInstanceOf[TextView]
     val transactWhat = view.findViewById(R.id.transactWhat).asInstanceOf[TextView]
@@ -295,23 +288,28 @@ class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar w
     val getDate = new java.util.Date(info.stamp)
 
     def fillView(holder: ViewHolder) = {
-      val humanSum = if (info.isLooper) denom.coloredP2WSH(info.firstSum, new String)
+      val humanAmount = if (info.isLooper) denom.coloredP2WSH(info.firstSum, new String)
         else if (info.incoming == 1) denom.coloredIn(info.firstSum, new String)
         else denom.coloredOut(info.firstSum, new String)
 
-      holder.transactCircle setImageResource imageMap(info.status)
+      val bgColor = revealedPreimages contains info.preimage match {
+        case true if info.status == WAITING => Denomination.yellowHighlight
+        case _ => 0x00000000
+      }
+
       holder.transactWhen setText when(System.currentTimeMillis, getDate).html
       holder.transactWhat setVisibility viewMap(isTablet || isSearching)
       holder.transactWhat setText getDescription(info.description).html
-      holder.transactSum setText s"<img src='ln'/>$humanSum".html
+      holder.transactSum setText s"<img src='ln'/>$humanAmount".html
+      holder.transactCircle setImageResource iconDict(info.status)
+      holder.view setBackgroundColor bgColor
     }
 
     def generatePopup = {
-      val humanStatus = info.incoming -> info.status match {
-        case _ \ FROZEN => s"<strong>${app getString ln_state_frozen}</strong>"
-        case 0 \ FAILURE => s"<strong>${app getString ln_state_fail_out}</strong>"
-        case 1 \ FAILURE => s"<strong>${app getString ln_state_fail_in}</strong>"
-        case _ \ SUCCESS => s"<strong>${app getString ln_state_success}</strong>"
+      val humanStatus = info.status match {
+        case FAILURE if 0 == info.incoming => s"<strong>${app getString ln_state_fail_out}</strong>"
+        case FAILURE if 1 == info.incoming => s"<strong>${app getString ln_state_fail_in}</strong>"
+        case SUCCESS => s"<strong>${app getString ln_state_success}</strong>"
         case _ => s"<strong>${app getString ln_state_wait}</strong>"
       }
 
@@ -340,7 +338,7 @@ class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar w
       PaymentInfoWrap.acceptedPayments get rd.pr.paymentHash foreach { rd1 =>
         val routingPath = for (usedHop <- rd1.usedRoute) yield usedHop.humanDetails
         val errors = PaymentInfo.errors.getOrElse(rd.pr.paymentHash, Vector.empty).reverse.map(_.toString) mkString "\n==\n"
-        val receiverInfo = s"Payee node: ${rd1.pr.nodeId.toString}, Expiry: ${rd1.pr.adjustedMinFinalCltvExpiry} blocks"
+        val receiverInfo = s"Payee node ID: ${rd1.pr.nodeId.toString}, Expiry: ${rd1.pr.adjustedMinFinalCltvExpiry} blocks"
         val debugInfo = ("Your wallet" +: routingPath :+ receiverInfo mkString "\n-->\n") + s"\n\n$errors"
         paymentDebug setOnClickListener onButtonTap(host share debugInfo)
         paymentDebug setVisibility View.VISIBLE
@@ -350,9 +348,7 @@ class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar w
         val fee = MilliSatoshi(info.lastMsat - info.firstMsat)
         val paidFeePercent = fee.amount / (info.firstMsat / 100D)
         val sentHuman = if (info.isLooper) denom.coloredP2WSH(info.firstSum, denom.sign) else denom.coloredOut(info.firstSum, denom.sign)
-        val title = app.getString(ln_outgoing_title).format(humanStatus, sentHuman, inFiat, denom.coloredOut(fee, denom.sign), paidFeePercent)
-        val expiryBlocksLeftPart = app.plur1OrZero(expiryLeft, info.lastExpiry - broadcaster.currentHeight)
-        if (info.status == WAITING) s"$expiryBlocksLeftPart<br>$title" else title
+        app.getString(ln_outgoing_title).format(humanStatus, sentHuman, inFiat, denom.coloredOut(fee, denom.sign), paidFeePercent)
       }
 
       info.incoming -> rd.pr.fallbackAddress -> rd.pr.amount match {
@@ -391,22 +387,20 @@ class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar w
     val getDate = wrap.tx.getUpdateTime
 
     def fillView(holder: ViewHolder) = {
-      val humanSum = wrap.visibleValue.isPositive match {
-        case _ if fundTxIds contains txid => denom.coloredP2WSH(-wrap.visibleValue, new String)
-        case false => denom.coloredOut(-wrap.visibleValue, new String)
-        case true => denom.coloredIn(wrap.visibleValue, new String)
-      }
+      val humanAmount = if (fundTxIds contains txid) denom.coloredP2WSH(-wrap.visibleValue, new String)
+        else if (wrap.visibleValue.isPositive) denom.coloredIn(wrap.visibleValue, new String)
+        else denom.coloredOut(-wrap.visibleValue, new String)
 
       val status = if (txDead) dead else if (txDepth >= minDepth) conf1 else await
       holder.transactWhen setText when(System.currentTimeMillis, getDate).html
-      holder.transactSum setText s"<img src='btc'/>$humanSum".html
+      holder.transactSum setText s"<img src='btc'/>$humanAmount".html
       holder.transactWhat setVisibility viewMap(isTablet)
       holder.transactCircle setImageResource status
       holder.transactWhat setText txid
     }
 
     def generatePopup = {
-      val confs = app.plur1OrZero(txsConfs, txDepth)
+      val confs = if (txDead) txsConfs.last else app.plur1OrZero(txsConfs, txDepth)
       val detailsWrapper = host.getLayoutInflater.inflate(R.layout.frag_tx_btc_details, null)
       val humanValues = wrap.directedScriptPubKeysWithValueTry(wrap.visibleValue.isPositive) collect {
         case Success(channelFunding \ value) if channelFunding.isSentToP2WSH => P2WSHData(value, channelFunding)
@@ -470,8 +464,9 @@ class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar w
 
   // LN SEND / RECEIVE
 
-  def receive(chansWithRoutes: Map[Channel, PaymentRoute], maxCanReceive: MilliSatoshi,
-              title: View, defDescr: String)(onDone: RoutingData => Unit) = {
+  def receive(chansWithRoutes: Map[Channel, PaymentRoute],
+              maxCanReceive: MilliSatoshi, minCanReceive: MilliSatoshi,
+              title: View, desc: String)(onDone: RoutingData => Unit) = {
 
     val baseHint = app.getString(amount_hint_can_receive).format(denom parsedWithSign maxCanReceive)
     val content = host.getLayoutInflater.inflate(R.layout.frag_ln_input_receive, null, false)
@@ -480,13 +475,21 @@ class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar w
     val bld = baseBuilder(title, content)
 
     def makeNormalRequest(sum: MilliSatoshi) = {
-      val goodChans = chansWithRoutes.keys.toVector.filter(channel => estimateCanReceive(channel) >= sum.amount).sortBy(estimateCanReceive) take 4
-      PaymentInfoWrap.recordRoutingDataWithPr(goodChans map chansWithRoutes, sum, ByteVector(random getBytes 32), inputDescription.getText.toString.trim)
+      val mostViableChannels = chansWithRoutes.keys.toVector
+        .filter(chan => chan.estimateCanReceive >= sum.amount) // In principle can receive an amount
+        .sortBy(chan => if (chan.isHosted) 1 else 0) // Hosted channels are pushed to the back of the queue
+        .sortBy(_.estimateCanReceive) // First use channels with the smallest balance but still able to receive
+        .take(4) // Limit number of channels to ensure QR code is always readable
+
+      val preimage = ByteVector.view(random getBytes 32)
+      val extraRoutes = mostViableChannels map chansWithRoutes
+      val description = inputDescription.getText.toString.take(72).trim
+      PaymentInfoWrap.recordRoutingDataWithPr(extraRoutes, sum, preimage, description)
     }
 
     def recAttempt(alert: AlertDialog) = rateManager.result match {
       case Success(ms) if maxCanReceive < ms => app toast dialog_sum_big
-      case Success(ms) if minHtlcValue > ms => app toast dialog_sum_small
+      case Success(ms) if minCanReceive > ms => app toast dialog_sum_small
       case Failure(reason) => app toast dialog_sum_small
 
       case Success(ms) => rm(alert) {
@@ -498,7 +501,8 @@ class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar w
 
     def setMax(alert: AlertDialog) = rateManager setSum Try(maxCanReceive)
     mkCheckFormNeutral(recAttempt, none, setMax, bld, dialog_ok, dialog_cancel, dialog_max)
-    inputDescription setText defDescr
+    if (maxCanReceive == minCanReceive) setMax(null) // Since user can't set anything else
+    inputDescription setText desc
   }
 
   abstract class OffChainSender(pr: PaymentRequest) {
@@ -550,44 +554,42 @@ class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar w
   }
 
   def doSendOffChain(rd: RoutingData): Unit = {
-    val sendableEither = ChannelManager.checkIfSendable(rd)
-    val accChanOpt = ChannelManager.accumulatorChanOpt(rd)
+    if (ChannelManager.currentBlocksLeft.isEmpty) app toast err_ln_chain_wait
+    val sendableOrAlternatives = ChannelManager.checkIfSendable(rd)
+    val accumulatorChanOpt = ChannelManager.accumulatorChanOpt(rd)
 
-    sendableEither -> accChanOpt match {
-      case Left(_ \ SENDABLE_AIR) \ Some(acc) => <(offerAir(acc, rd), onFail)(none)
+    sendableOrAlternatives -> accumulatorChanOpt match {
+      case Left(_ \ SENDABLE_AIR) \ Some(acc) => <(startAIR(acc, rd), onFail)(none)
       case Left(unsendableAirNotPossible \ _) \ _ => app toast unsendableAirNotPossible
       case _ => PaymentInfoWrap addPendingPayment rd
     }
   }
 
-  def doSendOffChainOnUI(rd: RoutingData) =
-    UITask(me doSendOffChain rd).run
-
-  def offerAir(toChan: Channel, origEmptyRD: RoutingData) = {
+  def startAIR(toChan: Channel, origEmptyRD: RoutingData) = {
     val origEmptyRD1 = origEmptyRD.copy(airLeft = origEmptyRD.airLeft - 1)
-    val deltaAmountToSend = origEmptyRD1.withMaxOffChainFeeAdded - math.max(estimateCanSend(toChan), 0L)
+    val deltaAmountToSend = origEmptyRD1.withMaxOffChainFeeAdded - math.max(toChan.estimateCanSend, 0L)
     val amountCanRebalance = ChannelManager.airCanSendInto(toChan).reduceOption(_ max _) getOrElse 0L
     require(deltaAmountToSend > 0, "Accumulator already has enough money for a final payment")
     require(amountCanRebalance > 0, "No channel is able to send funds into accumulator")
 
     val Some(_ \ extraHops) = channelAndHop(toChan)
     val finalAmount = MilliSatoshi(deltaAmountToSend min amountCanRebalance)
-    // Further rebalancing attempts should always be halted if new off-chain payment is detected since rebalancing has started
-    val rbRD = PaymentInfoWrap.recordRoutingDataWithPr(Vector(extraHops), finalAmount, ByteVector(random getBytes 32), REBALANCING)
+    val rbRD = PaymentInfoWrap.recordRoutingDataWithPr(Vector(extraHops),
+      finalAmount, ByteVector(random getBytes 32), REBALANCING)
 
     val listener = new ChannelListener { self =>
-      override def onSettled(chan: Channel, cs: Commitments) = {
-        val isOK = cs.localCommit.spec.fulfilledOutgoing.exists(_.paymentHash == rbRD.pr.paymentHash)
-        if (isOK) runAnd(ChannelManager detachListener self)(me doSendOffChainOnUI origEmptyRD1)
-      }
-
       override def outPaymentAccepted(rd: RoutingData) =
         if (rd.pr.paymentHash != rbRD.pr.paymentHash)
           ChannelManager detachListener self
+
+      override def onSettled(cs: Commitments) = {
+        val isOK = cs.localSpec.fulfilledOutgoing.exists(_.paymentHash == rbRD.pr.paymentHash)
+        if (isOK) runAnd(ChannelManager detachListener self) { UITask(me doSendOffChain origEmptyRD1).run }
+      }
     }
 
     ChannelManager attachListener listener
-    me doSendOffChainOnUI rbRD
+    UITask(me doSendOffChain rbRD).run
   }
 
   // BTC SEND / BOOST
@@ -598,7 +600,7 @@ class FragWalletWorker(val host: WalletActivity, frag: View) extends SearchBar w
   }
 
   def sendBtcPopup(uri: BitcoinURI): RateManager = {
-    val minMsatAmountTry = Try(uri.getAmount).filter(_.value > 0L).map(coin2MSat)
+    val minMsatAmountTry = Try(uri.getAmount).filter(org.bitcoinj.core.Transaction.MIN_NONDUST_OUTPUT.isLessThan).map(coin2MSat)
     val minMsatAmount = minMsatAmountTry getOrElse coin2MSat(org.bitcoinj.core.Transaction.MIN_NONDUST_OUTPUT)
     val baseHint = app.getString(amount_hint_can_send).format(denom parsedWithSign app.kit.conf0Balance)
     val content = host.getLayoutInflater.inflate(R.layout.frag_input_fiat_converter, null, false)

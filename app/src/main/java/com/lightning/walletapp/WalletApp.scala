@@ -9,9 +9,9 @@ import com.lightning.walletapp.lnutils._
 import com.lightning.walletapp.ln.wire._
 import scala.collection.JavaConverters._
 import com.lightning.walletapp.ln.Tools._
-import com.lightning.walletapp.ln.Channel._
 import com.lightning.walletapp.ln.LNParams._
 import com.lightning.walletapp.ln.PaymentInfo._
+import com.lightning.walletapp.ln.NormalChannel._
 import com.google.common.util.concurrent.Service.State._
 import com.lightning.walletapp.lnutils.ImplicitConversions._
 import com.lightning.walletapp.ln.wire.LightningMessageCodecs._
@@ -21,9 +21,9 @@ import scala.util.{Success, Try}
 import rx.lang.scala.{Observable => Obs}
 import scodec.bits.{BitVector, ByteVector}
 import org.bitcoinj.wallet.{SendRequest, Wallet}
+import fr.acinq.bitcoin.Crypto.{Point, PublicKey}
 import androidx.work.{ExistingWorkPolicy, WorkManager}
 import android.content.{ClipData, ClipboardManager, Context}
-import fr.acinq.bitcoin.Crypto.{Point, PrivateKey, PublicKey}
 import com.lightning.walletapp.helper.{AwaitService, RichCursor}
 import com.lightning.walletapp.lnutils.JsonHttpUtils.{pickInc, repeat}
 import com.lightning.walletapp.lnutils.olympus.{OlympusWrap, TxUploadAct}
@@ -40,7 +40,6 @@ import java.util.Collections.singletonList
 import fr.acinq.bitcoin.Protocol.Zeroes
 import org.bitcoinj.uri.BitcoinURI
 import scala.concurrent.Future
-import fr.acinq.bitcoin.Crypto
 import android.widget.Toast
 import scodec.DecodeResult
 import android.os.Build
@@ -101,13 +100,9 @@ class WalletApp extends Application { me =>
     clipboardManager setPrimaryClip bufferContent
   }
 
-  def sign(data: Bytes, pk: PrivateKey) = Try {
-    Crypto encodeSignature Crypto.sign(data, pk)
-  } getOrElse ByteVector.empty
-
   def mkNodeAnnouncement(id: PublicKey, na: NodeAddress, alias: String) =
-    NodeAnnouncement(signature = sign(random getBytes 32, randomPrivKey), features = ByteVector.empty,
-      timestamp = 0L, nodeId = id, rgbColor = (-128, -128, -128), alias take 16, addresses = na :: Nil)
+    NodeAnnouncement(signature = sign(Zeroes, randomPrivKey), features = ByteVector.empty,
+      timestamp = 0L, nodeId = id, (-128, -128, -128), alias take 16, addresses = na :: Nil)
 
   object TransData {
     var value: Any = new String
@@ -137,7 +132,7 @@ class WalletApp extends Application { me =>
       case bitcoinUriLink if bitcoinUriLink startsWith "groestlcoin" => bitcoinUri(bitcoinUriLink)
       case bitcoinUriLink if bitcoinUriLink startsWith "GROESTLCOIN" => bitcoinUri(bitcoinUriLink.toLowerCase)
       case nodeLink(key, host, port) => mkNodeAnnouncement(PublicKey(ByteVector fromValidHex key), NodeAddress.fromParts(host, port.toInt), host)
-      case shortNodeLink(key, host) => mkNodeAnnouncement(PublicKey(ByteVector fromValidHex key), NodeAddress.fromParts(host, 9735), host)
+      case shortNodeLink(key, host) => mkNodeAnnouncement(PublicKey(ByteVector fromValidHex key), NodeAddress.fromParts(host, port = 9735), host)
       case lnPayReq(prefix, data) => PaymentRequest.read(s"$prefix$data")
       case lnUrl(prefix, data) => LNUrl.fromBech32(s"$prefix$data")
       case _ => toBitcoinUri(rawInputTextToParse)
@@ -151,7 +146,7 @@ class WalletApp extends Application { me =>
     def shutDown = none
 
     def trustedNodeTry = Try(nodeaddress.decode(BitVector fromValidHex wallet.getDescription).require.value)
-    def fundingPubScript(some: HasCommitments) = singletonList(some.commitments.commitInput.txOut.publicKeyScript: org.bitcoinj.script.Script)
+    def fundingPubScript(some: HasNormalCommits) = singletonList(some.commitments.commitInput.txOut.publicKeyScript: org.bitcoinj.script.Script)
     def closingPubKeyScripts(cd: ClosingData) = cd.commitTxs.flatMap(_.txOut).map(_.publicKeyScript: org.bitcoinj.script.Script).asJava
     val checkpointsFile = if(!BuildConfig.APPLICATION_ID.contains("testnet")) "checkpoints.txt" else "checkpoints-testnet.txt"
     def useCheckPoints(time: Long) = CheckpointManager.checkpoint(params, getAssets open checkpointsFile, store, time)
@@ -192,17 +187,17 @@ class WalletApp extends Application { me =>
 
       for {
         _ <- Obs just null subscribeOn IOScheduler.apply delay 20.seconds
-        offlineChan <- ChannelManager.notClosing if offlineChan.state == SLEEPING
-        if offlineChan.data.announce.addresses.headOption.forall(_.canBeUpdatedIfOffline)
+        offlineChannel <- ChannelManager.all if offlineChannel.permanentOffline
+        if offlineChannel.data.announce.addresses.headOption.forall(_.canBeUpdatedIfOffline)
         // Call findNodes without `retry` wrapper because it gives harmless `Obs.empty` on error
-        Vector(ann1 \ _, _*) <- app.olympus findNodes offlineChan.data.announce.nodeId.toString
-      } offlineChan process ann1
+        Vector(ann1 \ _, _*) <- app.olympus findNodes offlineChannel.data.announce.nodeId.toString
+      } offlineChannel process ann1
 
       ConnectionManager.listeners += ChannelManager.socketEventsListener
       startBlocksDownload(ChannelManager.chainEventsListener)
       // Try to clear act leftovers if no channels are left
       app.olympus tellClouds OlympusWrap.CMDStart
-      PaymentInfoWrap.markFailedAndFrozen
+      PaymentInfoWrap.markFailedPayments
       ChannelManager.initConnect
       RatesSaver.subscription
     }
@@ -212,81 +207,64 @@ class WalletApp extends Application { me =>
 object ChannelManager extends Broadcaster {
   val operationalListeners = Set(ChannelManager, bag)
   val CMDLocalShutdown = CMDShutdown(scriptPubKey = None)
-  private[this] var initialChainHeight = app.kit.wallet.getLastBlockSeenHeight
-  // Blocks download has not started yet and we don't know how many is left
-  var currentBlocksLeft = Int.MaxValue
+  private val chanBackupWork = BackupWorker.workRequest(backupFileName, cloudSecret)
+  var currentBlocksLeft = Option.empty[Int]
 
   val socketEventsListener = new ConnectionListener {
     override def onOperational(nodeId: PublicKey, isCompat: Boolean) =
-      fromNode(notClosing, nodeId).foreach(_ process CMDOnline)
+      fromNode(nodeId).foreach(_ process CMDSocketOnline)
 
     override def onMessage(nodeId: PublicKey, msg: LightningMessage) = msg match {
-      case update: ChannelUpdate => fromNode(notClosing, nodeId).foreach(_ process update)
-      case errAll: Error if errAll.channelId == Zeroes => fromNode(notClosing, nodeId).foreach(_ process errAll)
-      case m: ChannelMessage => notClosing.find(_.hasCsOr(_.commitments.channelId, null) == m.channelId).foreach(_ process m)
+      case channelUpdate: ChannelUpdate => fromNode(nodeId).foreach(_ process channelUpdate)
+      case nodeLevelError: Error if nodeLevelError.channelId == Zeroes => fromNode(nodeId).foreach(_ process nodeLevelError)
+      case cm: ChannelMessage => fromNode(nodeId).find(_.getCommits.map(_.channelId) contains cm.channelId).foreach(_ process cm)
       case _ =>
     }
 
-    override def onDisconnect(nodeId: PublicKey) = for {
-      affectedChans <- Obs just fromNode(notClosing, nodeId) if affectedChans.nonEmpty
-      _ = affectedChans.foreach(affectedChan => affectedChan process CMDOffline)
-      announce <- Obs just affectedChans.head.data.announce delay 5.seconds
-    } ConnectionManager.connectTo(announce, notify = false)
+    override def onHostedMessage(ann: NodeAnnouncement, msg: HostedChannelMessage) =
+      fromNode(ann.nodeId).find(_.getCommits.map(_.channelId) contains ann.hostedChanId)
+        .foreach(_ process msg)
+
+    override def onDisconnect(nodeId: PublicKey) = {
+      fromNode(nodeId).foreach(_ process CMDSocketOffline)
+      Obs.just(null).delay(5.seconds).foreach(_ => initConnect)
+    }
   }
 
   val chainEventsListener = new TxTracker with BlocksListener with PeerDisconnectedEventListener {
-    def onPeerDisconnected(connectedPeer: Peer, numPeers: Int) = if (numPeers < 1) onBlock = oneTimeRun
-    def onBlocksDownloaded(p: Peer, b: Block, fb: FilteredBlock, left: Int) = onBlock(left)
+    def onPeerDisconnected(offPeer: Peer, numPeers: Int) = if (numPeers < 1) currentBlocksLeft = None
+    def onBlocksDownloaded(peer: Peer, b: Block, fb: FilteredBlock, left: Int) = onBlock(left)
     override def onChainDownloadStarted(peer: Peer, left: Int) = onBlock(left)
 
-    override def txConfirmed(txj: Transaction) = for (c <- notClosing) c process CMDConfirmed(txj)
-    def onCoinsReceived(w: Wallet, txj: Transaction, a: Coin, b: Coin) = onChainTx(txj)
-    def onCoinsSent(w: Wallet, txj: Transaction, a: Coin, b: Coin) = onChainTx(txj)
+    override def txConfirmed(txj: Transaction) = for (chan <- all) chan process CMDConfirmed(txj)
+    def onCoinsReceived(wallet: Wallet, txj: Transaction, a: Coin, b: Coin) = onChainTx(txj)
+    def onCoinsSent(wallet: Wallet, txj: Transaction, a: Coin, b: Coin) = onChainTx(txj)
 
-    var onBlock: Int => Unit = oneTimeRun
-    lazy val oneTimeRun: Int => Unit = left => {
-      // Set standardRun to be executed on new blocks
-      // then set `currentBlocksLeft` less than MaxValue
-      onBlock = standardRun
-      standardRun(left)
+    def onBlock(blocksLeft: Int) = {
+      val firstCall = currentBlocksLeft.isEmpty
+      currentBlocksLeft = Some(blocksLeft)
 
-      // Can already send payments at this point
-      // because `currentBlocksLeft` is updated
-      PaymentInfoWrap.resolvePending
-    }
-
-    lazy val standardRun: Int => Unit = left => {
-      // LN payment before BTC peers on app start: tried in `oneTimeRun`
-      // LN payment before BTC peers on app restart: tried in `oneTimeRun`
-      // LN payment after BTC peers on app start: tried immediately since `currentBlocksLeft` < `Int.MacValue`
-      // LN payment after BTC peers on app restart: tried immediately since `currentBlocksLeft` < `Int.MacValue`
-      // LN payment after BTC peers disconnected: tried in `oneTimeRun` because `onPeerDisconnected` resets `onBlock`
-
-      currentBlocksLeft = left
-      if (currentBlocksLeft < 1) {
-        // Send this once rescan is done to spare resources
-        val cmd = CMDBestHeight(currentHeight, initialChainHeight)
-        for (channel <- all) channel process cmd
-        initialChainHeight = currentHeight
-      }
+      // Let channels know immediately, important for hosted ones
+      // then also repeat on each next incoming last block to save resouces
+      if (firstCall || blocksLeft < 1) all.foreach(_ process CMDChainTipKnown)
+      // Don't call this on each new block but only on (re)connection
+      if (firstCall) PaymentInfoWrap.resolvePending
     }
 
     def onChainTx(txj: Transaction) = {
       val cmdOnChainSpent = CMDSpent(txj)
-      for (c <- all) c process cmdOnChainSpent
+      all.foreach(_ process cmdOnChainSpent)
       bag.extractPreimage(cmdOnChainSpent.tx)
     }
   }
 
   // BROADCASTER IMPLEMENTATION
 
-  def perKwSixSat = RatesSaver.rates.feeSix.value / 4
-  def perKwThreeSat = RatesSaver.rates.feeThree.value / 4
-
-  def currentHeight: Int =
-    // We may still be syncing but anyway a final chain height is known here
-    if (currentBlocksLeft == Int.MaxValue) app.kit.wallet.getLastBlockSeenHeight
-    else app.kit.wallet.getLastBlockSeenHeight + currentBlocksLeft
+  def perKwSixSat: Long = RatesSaver.rates.feeSix.value / 4
+  def perKwThreeSat: Long = RatesSaver.rates.feeThree.value / 4
+  def blockDaysLeft: Int = currentBlocksLeft.map(_ / blocksPerDay).getOrElse(Int.MaxValue)
+  def currentHeight: Int = app.kit.wallet.getLastBlockSeenHeight + currentBlocksLeft.getOrElse(0)
+  def currentBlockDay: Int = currentHeight / blocksPerDay
 
   def getTx(txid: ByteVector) = {
     val wrapped = Sha256Hash wrap txid.toArray
@@ -301,14 +279,14 @@ object ChannelManager extends Broadcaster {
   // CHANNEL LISTENER IMPLEMENTATION
 
   override def onProcessSuccess = {
-    case (_, close: ClosingData, _: Command) =>
+    case (_: NormalChannel, close: ClosingData, _: Command) =>
       // Repeatedly spend everything we can in this state in case it was unsuccessful before
       val tier12Publishable = for (state <- close.tier12States if state.isPublishable) yield state.txn
       val toSend = close.mutualClose ++ close.localCommit.map(_.commitTx) ++ tier12Publishable
       for (tx <- toSend) try app.kit blockSend tx catch none
 
-    case (chan, norm: NormalData, _: CMDBestHeight) if norm.commitments.updateOpt.isEmpty =>
-      // Depth barrier is relevant for Turbo channels: restrict receiving until confirmed
+    case (chan: NormalChannel, norm: NormalData, CMDChainTipKnown) if norm.commitments.updateOpt.isEmpty =>
+      // Depth barrier is relevant for Turbo channels, we must restrict receiving until funding is confirmed
       val fundingDepth \ isFundingDead = broadcaster.getStatus(chan.fundTxId)
 
       if (fundingDepth > minDepth && !isFundingDead) for {
@@ -317,26 +295,28 @@ object ChannelManager extends Broadcaster {
         dummy = Announcements.makeChannelUpdate(chainHash, nodePrivateKey, chan.data.announce.nodeId, shortChannelId)
       } chan process CMDChannelUpdate(dummy)
 
-    case (chan, norm: NormalData, real: ChannelUpdate)
-      if norm.commitments.updateOpt.exists(old => old.shortChannelId == real.shortChannelId && old.timestamp < real.timestamp) =>
-      // We have an old or dummy ChannelUpdate, replace it with a new one IF it updates parameters and is a more recent one
+    case (chan: Channel, _, real: ChannelUpdate) if chan shouldRenew real =>
+      // We had an old or dummy channel update and now they have sent a new one
       chan process CMDChannelUpdate(real)
+
+    case (chan: Channel, _, CMDSocketOnline) =>
+      // Memo that channel was online at least once
+      chan.permanentOffline = false
   }
 
   override def onBecome = {
     // Repeatedly resend a funding tx, update feerate on becoming open
-    case (_, wait: WaitFundingDoneData, _, _) => app.kit blockSend wait.fundingTx
-    case (chan, _: NormalData, SLEEPING, OPEN) => chan process CMDFeerate(perKwThreeSat)
+    case (_: NormalChannel, wait: WaitFundingDoneData, _, _) => app.kit blockSend wait.fundingTx
+    case (chan: NormalChannel, _: NormalData, SLEEPING, OPEN) => chan process CMDFeerate(perKwThreeSat)
   }
 
   // CHANNEL CREATION AND MANAGEMENT
 
-  val chanBackupWork = BackupWorker.workRequest(backupFileName, cloudSecret)
-  // All stored channels which would receive CMDSpent, CMDBestHeight and nothing else
-  var all: Vector[Channel] = for (chanState <- ChannelWrap doGet db) yield createChannel(operationalListeners, chanState)
-  def backUp = WorkManager.getInstance.beginUniqueWork("Backup", ExistingWorkPolicy.REPLACE, chanBackupWork).enqueue
-  def fromNode(of: Vector[Channel], nodeId: PublicKey) = for (c <- of if c.data.announce.nodeId == nodeId) yield c
-  def notClosing = for (c <- all if c.state != CLOSING) yield c
+  var all: Vector[Channel] = ChannelWrap doGet db collect {
+    case normal: HasNormalCommits => createChannel(operationalListeners, normal)
+    case hosted: HostedCommits => createHostedChannel(operationalListeners, hosted)
+    case other => throw new RuntimeException(s"Can't create channel with $other")
+  }
 
   def delayedPublishes = {
     val statuses = all.map(_.data).collect { case cd: ClosingData => cd.bestClosing.getState }
@@ -347,7 +327,7 @@ object ChannelManager extends Broadcaster {
   // AIR
 
   def airCanSendInto(targetChan: Channel) = for {
-    canSend <- all.filter(isOperational) diff Vector(targetChan) map estimateCanSend
+    canSend <- all.filter(isOperational).diff(targetChan :: Nil).map(_.estimateCanSend)
     // While rebalancing, payments from other channels will lose some off-chain fee
     canSendFeeIncluded = canSend - maxAcceptableFee(canSend, hops = 3)
     // Estimation should be smaller than original but not negative
@@ -356,36 +336,45 @@ object ChannelManager extends Broadcaster {
 
   def estimateAIRCanSend = {
     // We are ultimately bound by the useful capacity of the largest channel
-    val airCanSend = mostFundedChanOpt.map(chan => estimateCanSend(chan) + airCanSendInto(chan).sum)
-    val largestCapOpt = all.filter(isOperational).map(estimateNextUsefulCapacity).reduceOption(_ max _)
+    val airCanSend = mostFundedChanOpt.map(chan => chan.estimateCanSend + airCanSendInto(chan).sum)
+    val largestCapOpt = all.filter(isOperational).map(_.estimateNextUsefulCapacity).reduceOption(_ max _)
     math.min(airCanSend getOrElse 0L, largestCapOpt getOrElse 0L)
   }
 
   def accumulatorChanOpt(rd: RoutingData) =
     all.filter(chan => isOperational(chan) && channelAndHop(chan).nonEmpty)
-      .filter(chan => estimateNextUsefulCapacity(chan) >= rd.withMaxOffChainFeeAdded)
-      .sortBy(estimateCanReceive).headOption // The one most likely to be chosen by direct peer
+      .filter(_.estimateNextUsefulCapacity >= rd.withMaxOffChainFeeAdded)
+      .sortBy(_.estimateCanReceive).headOption // Smallest receivable
 
   // CHANNEL
 
-  def mostFundedChanOpt = all.filter(isOperational).sortBy(estimateCanSend).lastOption
-  def activeInFlightHashes = all.filter(isOperational).flatMap(inFlightHtlcs).map(_.add.paymentHash)
-  def frozenInFlightHashes = all.map(_.data).collect { case cd: ClosingData => cd.frozenPublishedHashes }.flatten
-  def initConnect = for (chan <- notClosing) ConnectionManager.connectTo(chan.data.announce, notify = false)
+  def mostFundedChanOpt = all.filter(isOperational).sortBy(_.estimateCanSend).lastOption
+  def activeInFlightHashes = all.filter(isOperational).flatMap(_.inFlightHtlcs).map(_.add.paymentHash)
+  // We need to connect the rest of channels including special cases like REFUNDING normal channel and SUSPENDED hosted channel
+  def initConnect = for (chan <- all if chan.state != CLOSING) ConnectionManager.connectTo(chan.data.announce, notify = false)
+  def backUp = WorkManager.getInstance.beginUniqueWork("Backup", ExistingWorkPolicy.REPLACE, chanBackupWork).enqueue
+  def fromNode(nodeId: PublicKey) = for (chan <- all if chan.data.announce.nodeId == nodeId) yield chan
   def attachListener(lst: ChannelListener) = for (chan <- all) chan.listeners += lst
   def detachListener(lst: ChannelListener) = for (chan <- all) chan.listeners -= lst
 
-  def createChannel(initialListeners: Set[ChannelListener], bootstrap: ChannelData): Channel = new Channel { self =>
-    def SEND(m: LightningMessage) = for (work <- ConnectionManager.connections get data.announce.nodeId) work.handler process m
+  def createHostedChannel(initListeners: Set[ChannelListener], bootstrap: ChannelData) = new HostedChannelClient { self =>
+    def SEND(msg: LightningMessage) = for (work <- ConnectionManager.workers get data.announce.nodeId) work.handler process msg
+    def STORE(data: ChannelData) = runAnd(data)(ChannelWrap put data)
+    listeners = initListeners
+    doProcess(bootstrap)
+  }
 
-    def STORE(data: HasCommitments) = runAnd(data) {
+  def createChannel(initListeners: Set[ChannelListener], bootstrap: ChannelData) = new NormalChannel { self =>
+    def SEND(msg: LightningMessage) = for (work <- ConnectionManager.workers get data.announce.nodeId) work.handler process msg
+
+    def STORE(data: ChannelData) = runAnd(data) {
       // Put updated data into db, schedule gdrive upload,
-      // replace if upload already is pending, return data
+      // replace if upload is already pending, return data
       ChannelWrap put data
       backUp
     }
 
-    def REV(cs: Commitments, rev: RevokeAndAck) = for {
+    def REV(cs: NormalCommits, rev: RevokeAndAck) = for {
       tx <- cs.remoteCommit.txOpt // We use old commitments to save a punishment for remote commit before it gets dropped
       myBalance = cs.remoteCommit.spec.toRemoteMsat // Local commit is cleared by now, remote still has relevant balance
       watchtowerFee = broadcaster.perKwThreeSat * 3 // Scorched earth policy becuase watchtower can't regenerate tx
@@ -393,9 +382,9 @@ object ChannelManager extends Broadcaster {
       serialized = LightningMessageCodecs.serialize(revocationInfoCodec encode revocationInfo)
     } db.change(RevokedInfoTable.newSql, tx.txid, cs.channelId, myBalance, serialized)
 
-    def GETREV(cs: Commitments, tx: fr.acinq.bitcoin.Transaction) = {
-      val dbCursor = db.select(RevokedInfoTable.selectTxIdSql, tx.txid)
-      val rc = RichCursor(dbCursor).headTry(_ string RevokedInfoTable.info)
+    def GETREV(cs: NormalCommits, tx: fr.acinq.bitcoin.Transaction) = {
+      val databaseCursor = db.select(RevokedInfoTable.selectTxIdSql, tx.txid)
+      val rc = RichCursor(databaseCursor).headTry(_ string RevokedInfoTable.info)
 
       for {
         serialized <- rc.toOption
@@ -407,30 +396,19 @@ object ChannelManager extends Broadcaster {
       } yield Helpers.Closing.claimRevokedRemoteCommitTxOutputs(ri1, tx)
     }
 
-    def CLOSEANDWATCHREVHTLC(cd: ClosingData) = {
-      // After publishing a revoked remote commit our peer may further publish Timeout and Success HTLC outputs
-      // our job here is to watch every output of every revoked commit tx and re-spend it before their CSV delay runs out
-      repeat(app.olympus getChildTxs cd.commitTxs.map(_.txid), pickInc, 7 to 8).foreach(_ map CMDSpent foreach process, none)
-      app.kit.wallet.addWatchedScripts(app.kit closingPubKeyScripts cd)
-      BECOME(STORE(cd), CLOSING)
-    }
-
     def CLOSEANDWATCH(cd: ClosingData) = {
       val tier12txs = cd.tier12States.map(_.txn.bin).toVector
       if (tier12txs.nonEmpty) app.olympus tellClouds TxUploadAct(txvec.encode(tier12txs).require.toByteVector, Nil, "txs/schedule")
+      // In case of breach after publishing a revoked remote commit our peer may further publish Timeout and Success HTLC outputs
+      // our job here is to watch for every output of every revoked commit tx and re-spend it before their CSV delay runs out
+      repeat(app.olympus getChildTxs cd.commitTxs.map(_.txid), pickInc, 7 to 8).foreach(_ map CMDSpent foreach process, none)
       repeat(app.olympus getChildTxs cd.commitTxs.map(_.txid), pickInc, 7 to 8).foreach(_ foreach bag.extractPreimage, none)
       // Collect all the commit txs publicKeyScripts and watch these scripts locally for future possible payment preimages
       app.kit.wallet.addWatchedScripts(app.kit closingPubKeyScripts cd)
       BECOME(STORE(cd), CLOSING)
     }
 
-    def ASKREFUNDTX(ref: RefundingData) = {
-      // Failsafe check in case if we are still in REFUNDING state after app is restarted
-      val txsObs = app.olympus getChildTxs Seq(ref.commitments.commitInput.outPoint.txid)
-      txsObs.foreach(_ map CMDSpent foreach process, none)
-    }
-
-    def ASKREFUNDPEER(some: HasCommitments, point: Point) = {
+    def ASKREFUNDPEER(some: HasNormalCommits, point: Point) = {
       val msg = ByteVector.fromValidHex("please publish your local commitment".hex)
       val ref = RefundingData(some.announce, Some(point), some.commitments)
       val error = Error(some.commitments.channelId, msg)
@@ -441,9 +419,7 @@ object ChannelManager extends Broadcaster {
       SEND(error)
     }
 
-    // First add listeners, then call
-    // doProcess on current thread
-    listeners = initialListeners
+    listeners = initListeners
     doProcess(bootstrap)
   }
 
@@ -451,7 +427,7 @@ object ChannelManager extends Broadcaster {
 
   def checkIfSendable(rd: RoutingData) = {
     val isFulfilledAlready = bag.getPaymentInfo(rd.pr.paymentHash).filter(_.status == SUCCESS)
-    if (isFulfilledAlready.isSuccess) Left(err_ln_fulfilled, NOT_SENDABLE) else mostFundedChanOpt map estimateCanSend match {
+    if (isFulfilledAlready.isSuccess) Left(err_ln_fulfilled, NOT_SENDABLE) else mostFundedChanOpt.map(_.estimateCanSend) match {
       // May happen such that we had enough while were deciding whether to pay, but do not have enough funds now, also check extended options
       case Some(max) if max < rd.firstMsat && rd.airLeft > 1 && estimateAIRCanSend >= rd.firstMsat => Left(dialog_sum_big, SENDABLE_AIR)
       case Some(max) if max < rd.firstMsat => Left(dialog_sum_big, NOT_SENDABLE)
@@ -462,7 +438,7 @@ object ChannelManager extends Broadcaster {
 
   def fetchRoutes(rd: RoutingData) = {
     // First we collect chans which in principle can handle a given payment sum right now, then prioritize less busy chans
-    val from = all.filter(chan => isOperational(chan) && estimateCanSend(chan) >= rd.firstMsat).map(_.data.announce.nodeId).distinct
+    val from = all.filter(chan => isOperational(chan) && chan.estimateCanSend >= rd.firstMsat).map(_.data.announce.nodeId).distinct
 
     def withHints = for {
       tag <- Obs from rd.pr.routingInfo
@@ -486,16 +462,14 @@ object ChannelManager extends Broadcaster {
       else Obs.zip(getRoutes(rd.pr.nodeId) +: withHints).map(_.flatten.toVector)
 
     for {
-      cheapestUnorderedRoutes <- paymentRoutesObs
-      busyMap = Tools.toMap[Channel, PublicKey, Int](all, _.data.announce.nodeId, chan => inFlightHtlcs(chan).size)
-      openMap = Tools.toMap[Channel, PublicKey, Int](all, _.data.announce.nodeId, chan => if (chan.state == OPEN) 0 else 1)
-      cheapestOrderedRoutes = cheapestUnorderedRoutes.sortBy(cheapestRouteCandidate => LNParams getCompoundFee cheapestRouteCandidate)
-    } yield useFirstRoute(cheapestOrderedRoutes.sortBy(busyMap compose rd.nextNodeId).sortBy(openMap compose rd.nextNodeId), rd)
+      rs <- paymentRoutesObs
+      busyMap = Tools.toMap[Channel, PublicKey, Int](all, _.data.announce.nodeId, channel => channel.inFlightHtlcs.size)
+      openMap = Tools.toMap[Channel, PublicKey, Int](all, _.data.announce.nodeId, channel => if (channel.state == OPEN) 0 else 1)
+    } yield useFirstRoute(rs.sortBy(estimateCompoundFee).sortBy(busyMap compose rd.nextNodeId).sortBy(openMap compose rd.nextNodeId), rd)
   }
 
   def sendEither(foeRD: FullOrEmptyRD, noRoutes: RoutingData => Unit): Unit = foeRD match {
-    // Find a local channel which is online, can send an amount and belongs to a correct peer
-    case Right(rd) if frozenInFlightHashes contains rd.pr.paymentHash =>
+    // Find a channel which can send an amount and belongs to a correct peer, not necessairly online
     case Right(rd) if activeInFlightHashes contains rd.pr.paymentHash =>
     case Left(emptyRD) => noRoutes(emptyRD)
 
@@ -503,9 +477,9 @@ object ChannelManager extends Broadcaster {
       all filter isOperational find { chan =>
         // Reflexive payment may happen through two chans belonging to the same peer
         // here we must make sure we don't accidently use terminal channel as source one
-        val excludeChan = if (rd.usedRoute.isEmpty) 0L else rd.usedRoute.last.shortChannelId
-        val isLoop = chan.hasCsOr(_.commitments.updateOpt.exists(_.shortChannelId == excludeChan), false)
-        !isLoop && chan.data.announce.nodeId == rd.nextNodeId(rd.usedRoute) && estimateCanSend(chan) >= rd.firstMsat
+        val excludeShortChannelId = if (rd.usedRoute.isEmpty) 0L else rd.usedRoute.last.shortChannelId
+        val isLoop = chan.getCommits.flatMap(_.updateOpt).exists(_.shortChannelId == excludeShortChannelId)
+        !isLoop && chan.data.announce.nodeId == rd.nextNodeId(rd.usedRoute) && chan.estimateCanSend >= rd.firstMsat
       } match {
         case None => sendEither(useFirstRoute(rd.routes, rd), noRoutes)
         case Some(targetGoodChannel) => targetGoodChannel process rd

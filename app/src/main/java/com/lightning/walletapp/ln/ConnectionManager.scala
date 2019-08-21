@@ -4,11 +4,10 @@ import scala.concurrent._
 import scala.concurrent.duration._
 import scala.collection.JavaConverters._
 import com.lightning.walletapp.ln.wire._
+import com.lightning.walletapp.ln.Tools._
 import com.lightning.walletapp.ln.LNParams._
 import com.lightning.walletapp.ln.Features._
-
-import rx.lang.scala.{Observable => Obs}
-import com.lightning.walletapp.ln.Tools.{Bytes, none}
+import rx.lang.scala.{Subscription, Observable => Obs}
 import com.lightning.walletapp.ln.crypto.Noise.KeyPair
 import java.util.concurrent.ConcurrentHashMap
 import fr.acinq.bitcoin.Crypto.PublicKey
@@ -19,29 +18,47 @@ import java.net.Socket
 
 object ConnectionManager {
   var listeners = Set.empty[ConnectionListener]
-  val connections = new ConcurrentHashMap[PublicKey, Worker].asScala
+  val workers = new ConcurrentHashMap[PublicKey, Worker].asScala
+  val keyPair = KeyPair(nodePublicKey.toBin, nodePrivateKey.toBin)
 
   protected[this] val events = new ConnectionListener {
     override def onMessage(nodeId: PublicKey, msg: LightningMessage) = for (lst <- listeners) lst.onMessage(nodeId, msg)
+    override def onHostedMessage(ann: NodeAnnouncement, msg: HostedChannelMessage) = for (lst <- listeners) lst.onHostedMessage(ann, msg)
     override def onOperational(nodeId: PublicKey, isCompat: Boolean) = for (lst <- listeners) lst.onOperational(nodeId, isCompat)
     override def onDisconnect(nodeId: PublicKey) = for (lst <- listeners) lst.onDisconnect(nodeId)
   }
 
-  def connectTo(ann: NodeAnnouncement, notify: Boolean) = {
-    val noWorkerPresent = connections.get(ann.nodeId).isEmpty
-    if (noWorkerPresent) connections += ann.nodeId -> new Worker(ann)
+  def connectTo(ann: NodeAnnouncement, notify: Boolean) = synchronized {
+    if (workers.get(ann.nodeId).isEmpty) workers(ann.nodeId) = new Worker(ann)
     else if (notify) events.onOperational(ann.nodeId, isCompat = true)
   }
 
   class Worker(val ann: NodeAnnouncement, buffer: Bytes = new Bytes(1024), val sock: Socket = new Socket) {
     implicit val context: ExecutionContextExecutor = ExecutionContext fromExecutor Executors.newSingleThreadExecutor
-    private val keyPair = KeyPair(nodePublicKey.toBin, nodePrivateKey.toBin)
-    var lastMsg = System.currentTimeMillis
+    private var ourLastPing = Option.empty[Ping]
+    private var pinging: Subscription = _
 
+    def disconnect: Unit = try sock.close catch none
     val handler: TransportHandler = new TransportHandler(keyPair, ann.nodeId) {
-      def handleEnterOperationalState = handler process Init(LNParams.globalFeatures, LNParams.localFeatures)
       def handleEncryptedOutgoingData(data: ByteVector) = try sock.getOutputStream write data.toArray catch handleError
-      def handleDecryptedIncomingData(data: ByteVector) = intercept(LightningMessageCodecs deserialize data)
+      def handleDecryptedIncomingData(data: ByteVector) = Tuple2(LightningMessageCodecs deserialize data, ourLastPing) match {
+        case (init: Init, _) => events.onOperational(isCompat = areSupported(init.localFeatures) && dataLossProtect(init.localFeatures), nodeId = ann.nodeId)
+        case Ping(replyLength, _) \ _ if replyLength > 0 && replyLength <= 65532 => handler process Pong(ByteVector fromValidHex "00" * replyLength)
+        case Pong(randomData) \ Some(ourPing) if randomData.size == ourPing.pongLength => ourLastPing = None
+        case (message: HostedChannelMessage, _) => events.onHostedMessage(ann, message)
+        case (message, _) => events.onMessage(ann.nodeId, message)
+      }
+
+      def handleEnterOperationalState = {
+        handler process Init(LNParams.globalFeatures, LNParams.localFeatures)
+        pinging = Obs.interval(15.seconds).map(_ => random.nextInt(10) + 1) subscribe { length =>
+          val ourNextPing = Ping(data = ByteVector.view(random getBytes length), pongLength = length)
+          if (ourLastPing.isEmpty) handler process ourNextPing else disconnect
+          ourLastPing = Some(ourNextPing)
+        }
+      }
+
+      // Just disconnect immediately in all cases
       def handleError = { case _ => disconnect }
     }
 
@@ -59,33 +76,17 @@ object ConnectionManager {
     }
 
     thread onComplete { _ =>
-      connections -= ann.nodeId
-      events onDisconnect ann.nodeId
-    }
-
-    def disconnect = try sock.close catch none
-    def intercept(message: LightningMessage) = {
-      // Update liveness on each incoming message
-      lastMsg = System.currentTimeMillis
-
-      message match {
-        case their: Init => events.onOperational(isCompat = areSupported(their.localFeatures) && dataLossProtect(their.localFeatures), nodeId = ann.nodeId)
-        case Ping(replyLength, _) if replyLength > 0 && replyLength <= 65532 => handler process Pong(ByteVector fromValidHex "00" * replyLength)
-        case internalMessage => events.onMessage(ann.nodeId, internalMessage)
-      }
+      workers.remove(ann.nodeId)
+      events.onDisconnect(ann.nodeId)
+      try pinging.unsubscribe catch none
     }
   }
-
-  for {
-    _ <- Obs interval 30.seconds
-    tooLongAgo = System.currentTimeMillis - 1000L * 60
-    worker <- connections.values if worker.lastMsg < tooLongAgo
-  } worker.disconnect
 }
 
 class ConnectionListener {
   def onOpenOffer(nodeId: PublicKey, msg: OpenChannel): Unit = none
   def onMessage(nodeId: PublicKey, msg: LightningMessage): Unit = none
+  def onHostedMessage(ann: NodeAnnouncement, msg: HostedChannelMessage): Unit = none
   def onOperational(nodeId: PublicKey, isCompat: Boolean): Unit = none
   def onDisconnect(nodeId: PublicKey): Unit = none
 }

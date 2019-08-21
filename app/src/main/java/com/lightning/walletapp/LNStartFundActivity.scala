@@ -6,8 +6,8 @@ import com.lightning.walletapp.Utils._
 import com.lightning.walletapp.ln.wire._
 import com.lightning.walletapp.R.string._
 import com.lightning.walletapp.ln.Tools._
-import com.lightning.walletapp.ln.Channel._
 import com.lightning.walletapp.Denomination._
+import com.lightning.walletapp.ln.NormalChannel._
 import com.lightning.walletapp.lnutils.ImplicitConversions._
 import com.lightning.walletapp.lnutils.ImplicitJsonFormats._
 import android.widget.{ImageButton, TextView, Toast}
@@ -46,21 +46,44 @@ class LNStartFundActivity extends TimerActivity { me =>
     case _ => finish
   }
 
+  def saveChan(channel: Channel, some: HasNormalCommits) = {
+    // Saving error will halt all further progress, this is desired
+    channel STORE some
+
+    app.kit.wallet.addWatchedScripts(app.kit fundingPubScript some)
+    // Start watching a channel funding script and save a channel, order an encrypted backup upload
+    val encrypted = AES.encReadable(RefundingData(some.announce, None, some.commitments).toJson.toString, LNParams.cloudSecret.toArray)
+    val chanUpload = ChannelUploadAct(encrypted.toByteVector, Seq("key" -> LNParams.cloudId.toHex), "data/put", some.announce.alias)
+    app.olympus.tellClouds(chanUpload)
+
+    // Make this channel able to receive ordinary events
+    channel.listeners = ChannelManager.operationalListeners
+    ChannelManager.all +:= channel
+
+    // Tell wallet activity to redirect to ops
+    app.TransData.value = FragWallet.REDIRECT
+    me exitTo MainActivity.wallet
+  }
+
   def proceed(openOpt: Option[OpenChannel], asString: String, ann: NodeAnnouncement): Unit = {
-    val freshChannel = ChannelManager.createChannel(bootstrap = InitData(ann), initialListeners = Set.empty)
+    val freshChannel = ChannelManager.createChannel(bootstrap = InitData(ann), initListeners = Set.empty)
     val peerIncompatible = new LightningException(me getString err_ln_peer_incompatible format ann.alias)
     val peerOffline = new LightningException(me getString err_ln_peer_offline format ann.alias)
+    val chainDisconnected = new LightningException(me getString err_ln_chain_disconnected)
     lnStartFundCancel setOnClickListener onButtonTap(whenBackPressed.run)
     lnStartFundDetails setText asString.html
 
     class OpenListener extends ConnectionListener with ChannelListener { self =>
-      override def onDisconnect(nodeId: PublicKey) = if (nodeId == ann.nodeId) onException(freshChannel -> peerOffline)
-
-      override def onMessage(nodeId: PublicKey, msg: LightningMessage) = msg match {
+      override def onMessage(nodeId: PublicKey, message: LightningMessage) = message match {
         case open: OpenChannel if nodeId == ann.nodeId && !open.channelFlags.isPublic => onOpenOffer(nodeId, open)
         case remoteError: Error if nodeId == ann.nodeId => onException(freshChannel -> remoteError.exception)
-        case _: ChannelSetupMessage if nodeId == ann.nodeId => freshChannel process msg
+        case _: ChannelSetupMessage if nodeId == ann.nodeId => freshChannel process message
         case _ => // We only listen to setup messages here to avoid conflicts
+      }
+
+      override def onDisconnect(nodeId: PublicKey) = if (nodeId == ann.nodeId) {
+        // Whenever anythig goes wrong we just disconnect since we risk nothing
+        onException(freshChannel -> peerOffline)
       }
 
       override def onOpenOffer(nodeId: PublicKey, open: OpenChannel) = if (openOpt.isEmpty) {
@@ -75,9 +98,9 @@ class LNStartFundActivity extends TimerActivity { me =>
       }
 
       override def onException = {
-        case _ \ errorWhileOpening =>
+        case (_: NormalChannel, openingError) =>
           // Inform user about error, disconnect this channel, go back to channel list
-          UITask(Toast.makeText(me, errorWhileOpening.getMessage, Toast.LENGTH_LONG).show).run
+          UITask(Toast.makeText(me, openingError.getMessage, Toast.LENGTH_LONG).show).run
           whenBackPressed.run
       }
     }
@@ -89,41 +112,23 @@ class LNStartFundActivity extends TimerActivity { me =>
       }
 
       override def onBecome = {
-        case (_, WaitFundingData(_, cmd, accept), WAIT_FOR_ACCEPT, WAIT_FOR_FUNDING) =>
-          // Peer has agreed to open a channel so now we create a real funding transaction
+        case (_: NormalChannel, _, _, WAIT_FOR_FUNDING | WAIT_FUNDING_DONE) if ChannelManager.currentBlocksLeft.isEmpty =>
+          // Funding with unreachable on-chain peers is problematic, just cancel the whole operation and let user know
+          onException(freshChannel -> chainDisconnected)
+
+        case (_: NormalChannel, WaitFundingData(_, cmd, accept), WAIT_FOR_ACCEPT, WAIT_FOR_FUNDING) =>
           // We create a funding transaction by replacing an output with a real one in a saved dummy funding transaction
           val req = cmd.batch replaceDummy pubKeyScript(cmd.localParams.fundingPrivKey.publicKey, accept.fundingPubkey)
           freshChannel process CMDFunding(app.kit.sign(req).tx)
 
-        case (_, wait: WaitFundingDoneData, WAIT_FUNDING_SIGNED, WAIT_FUNDING_DONE) =>
-          // Preliminary negotiations are complete, save channel and broadcast a fund tx
-          saveChan(wait)
-
-          // Broadcast a funding transaction
-          // Tell wallet activity to redirect to ops
-          LNParams.broadcaster nullOnBecome freshChannel
-          app.TransData.value = FragWallet.REDIRECT
-          me exitTo MainActivity.wallet
+        case transition @ (_: NormalChannel, wait: WaitFundingDoneData, WAIT_FUNDING_SIGNED, WAIT_FUNDING_DONE) =>
+          // Preliminary negotiations are complete, save channel FIRST AND THEN broadcast a funding transaction
+          saveChan(channel = freshChannel, wait)
+          ChannelManager onBecome transition
       }
 
       // Provide manual or batched amount
       def askLocalFundingConfirm: Runnable
-    }
-
-    def saveChan(some: HasCommitments) = {
-      // First of all we should store this chan
-      // error here will halt all further progress
-      freshChannel STORE some
-
-      app.kit.wallet.addWatchedScripts(app.kit fundingPubScript some)
-      // Start watching a channel funding script and save a channel, order an encrypted backup upload
-      val encrypted = AES.encReadable(RefundingData(some.announce, None, some.commitments).toJson.toString, LNParams.cloudSecret.toArray)
-      val chanUpload = ChannelUploadAct(encrypted.toByteVector, Seq("key" -> LNParams.cloudId.toHex), "data/put", some.announce.alias)
-      app.olympus.tellClouds(chanUpload)
-
-      // Make this channel able to receive ordinary events
-      freshChannel.listeners = ChannelManager.operationalListeners
-      ChannelManager.all +:= freshChannel
     }
 
     def localWalletFunderListener = new LocalOpenListener {
@@ -181,13 +186,9 @@ class LNStartFundActivity extends TimerActivity { me =>
       freshChannel process Tuple2(params, open)
 
       override def onBecome = {
-        case (_, wait: WaitBroadcastRemoteData, WAIT_FOR_FUNDING, WAIT_FUNDING_DONE) =>
-          // Preliminary negotiations are complete, save channel and wait for their tx
-          saveChan(wait)
-
-          // Tell wallet activity to redirect to ops
-          app.TransData.value = FragWallet.REDIRECT
-          me exitTo MainActivity.wallet
+        case (_: NormalChannel, wait: WaitBroadcastRemoteData, WAIT_FOR_FUNDING, WAIT_FUNDING_DONE) =>
+          // Preliminary negotiations are complete, save channel and wait for their funding tx
+          saveChan(channel = freshChannel, wait)
       }
     }
 
@@ -200,7 +201,7 @@ class LNStartFundActivity extends TimerActivity { me =>
       freshChannel.listeners -= openListener
       ConnectionManager.listeners -= openListener
       // Worker may have already been removed on some connection failure
-      ConnectionManager.connections.get(ann.nodeId).foreach(_.disconnect)
+      ConnectionManager.workers.get(ann.nodeId).foreach(_.disconnect)
       finish
     }
 

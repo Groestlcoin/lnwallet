@@ -161,6 +161,7 @@
         <item><![CDATA[<strong>%1$s&#160;подтвреждение</strong>]]></item>
         <item><![CDATA[<strong>%1$s&#160;подтверждения</strong>]]></item>
         <item><![CDATA[<strong>%1$s&#160;подтверждений</strong>]]></item>
+        <item><![CDATA[<strong>ОТМЕНЕНА</strong>]]></item>
     </array>
 
     <string name="send_scan_qr">Сканировать QR-код</string>
@@ -173,6 +174,7 @@
         Вы пытаетесь оплатить запрос-Молнию, но в кошельке сейчас нет открытых
         платежных каналов<br><br>Что с этим делать?<br><br>
         - Откройте платежный канал с узлом на ваш выбор, для наполнения канала в кошельке должны быть биткоины.<br><br>
+        - <a href=https://lnbig.com/#/open-channel/>Получите бесплатный входящий канал</a> от сервиса LNBIG.COM.
     ]]></string>
 
     <string name="ln_receive_title"><![CDATA[<font color=#0099FE><strong>Создать запрос-Молнию</strong></font>]]></string>
@@ -195,10 +197,13 @@
 
     <string name="err_ln_peer_offline">Не удалось подключиться к %1$s</string>
     <string name="err_ln_peer_incompatible">%1$s не поддерживает защиту от потери данных</string>
-    <string name="err_ln_remote_amount_high">Не получилось потому что сумма платежа слишком высока после добавления комиссии</string>
+    <string name="err_ln_chain_disconnected">Создание канала отменено потому что он-чейн кошелек в оффлайне</string>
+    <string name="err_ln_local_amount_high">Не получилось потому что после добавления комиссии сумма платежа стает слишком высокой для канала</string>
+    <string name="err_ln_remote_amount_high">Не получилось потому что после добавления комиссии сумма платежа стает слишком высокой для вашего пира</string>
     <string name="err_ln_remote_amount_low">Не получилось потому что сумма платежа слишком низка для вашего пира</string>
     <string name="err_ln_fulfilled">Не получилось потому что этот платежный запрос уже оплачен</string>
     <string name="err_ln_too_many">Не получилось потому что слишком много платежей уже в пути</string>
+    <string name="err_ln_chain_wait">Ждем подключения он-чейн кошелька</string>
 
     <string name="err_not_enough_funds"><![CDATA[
         На данный момент вы можете отправить до %1$s он-чейн, а сумма вашего платежа равна %2$s, что превышает максимальный размер на %3$s.
@@ -206,7 +211,6 @@
     ]]></string>
 
     <string name="err_ln_still_opening">Не получилось потому что платежный канал еще не открыт\n\nПополняющая канал Биткоин-транзакция должна получить до 6 подтверждений перед тем как его можно будет использовать для отправки платежей</string>
-    <string name="err_ln_expired"><![CDATA[Есть застрявший платеж<br><br>Вы можете принудительно закрыть канал или связаться с пиром, чтобы он исправил проблему<br><br>Хэш платежа<br>%1$s]]></string>
     <string name="err_empty_shrunk">Не получилось потому что не удалось подобрать нужную сумму комиссии. Вы можете добавить денег в кошелек и попробовать еше раз</string>
     <string name="err_tx_too_large">Не получилось потому что размер транзакции слишком большой. Попробуйте разбить ее на несколько более мелких транзакций</string>
     <string name="err_gdrive_sign_in_failed">Не получилось залогиниться в GDrive, хотите продолжить без восстановления каналов из бекапов GDrive?</string>
@@ -230,7 +234,6 @@
     <string name="ln_state_success">успешно оплачен</string>
     <string name="ln_state_fail_in">срок годности истек</string>
     <string name="ln_state_fail_out">возвращен назад</string>
-    <string name="ln_state_frozen">ожидаем возмещение</string>
 
     <string name="ln_info_total_payments">total payments</string>
     <string name="ln_info_in_flight">value in-flight</string>
@@ -246,8 +249,8 @@
     <string name="ln_mofn">%1$s из %2$s</string>
     <string name="ln_info_close_coop">Закрыт кооперативно</string>
     <string name="ln_info_close_local">Закрыт вашим кошельком</string>
-    <string name="ln_info_close_remote">Закрыт с той стороны</string>
-    <string name="ln_info_coop_attempt">Канал закрывается&#8230;</string>
+    <string name="ln_info_close_remote">Закрыт со стороны пира</string>
+    <string name="ln_info_coop_attempt">Ждем подпись от пира&#8230;</string>
 
     <string name="ln_info_high_fee">Входящая комиссия слишком высока: %1$s</string>
     <string name="ln_info_unknown_spend">Обнаружена неизвестная трата!</string>
@@ -261,6 +264,7 @@
     <string name="ln_info_status_opening"><![CDATA[<font color=#E68A00>ОТКРЫВАЕТСЯ</font>]]></string>
     <string name="ln_info_status_shutdown"><![CDATA[<font color=#E68A00>ЗАКРЫВАЕТСЯ</font>]]></string>
     <string name="ln_info_status_negotiations"><![CDATA[<font color=#E68A00>ПЕРЕГОВОРЫ</font>]]></string>
+    <string name="ln_info_status_suspended"><![CDATA[<font color=#E68A00>ЗАМОРОЖЕН</font>]]></string>
     <string name="ln_info_status_other"><![CDATA[<font color=#777777>%1$s</font>]]></string>
 
     <string name="ln_chan_close_inflight_details"><![CDATA[&#9888; <font color=#E68A00>В канале есть зависшие платежи</font> поэтому кооперативное закрытие будет отложено пока они не исчезнут<br><br>Рекомендуется не закрывать канал прямо сейчас, а вместо этого дать зависшим платежам некоторое время, все еще хотите продолжить?]]></string>
@@ -268,10 +272,9 @@
     <string name="ln_chan_close_confirm_local">Хотите закрыть канал и отправить возвратную Биткоин-транзакцию обратно в этот кошелек?</string>
     <string name="ln_chan_close">Закрыть канал</string>
 
-    <array name="ln_chan_actions_list">
+    <array name="ln_normal_chan_actions">
         <item>Открывающая транзакция</item>
         <item>Закрыть канал в кошелек</item>
-        <item>Возвратная транзакция</item>
     </array>
 
     <string name="btc_empty">Нет монет на цепи</string>
@@ -281,7 +284,7 @@
     <string name="ln_status_operational_many">Все каналы работают</string>
     <string name="ln_status_operational_one">Канал работает</string>
 
-    <array name="ln_chan_present">
+    <array name="ln_chan_ops_status">
         <item><![CDATA[Каналов нет]]></item>
         <item><![CDATA[Всего %1$s канал]]></item>
         <item><![CDATA[Всего %1$s канала]]></item>
@@ -293,13 +296,6 @@
         <item><![CDATA[<font color=#E68A00>Включается %1$s канал</font>]]></item>
         <item><![CDATA[<font color=#E68A00>Включаются %1$s канала</font>]]></item>
         <item><![CDATA[<font color=#E68A00>Включается %1$s каналов</font>]]></item>
-    </array>
-
-    <array name="ln_status_expiry">
-        <item><![CDATA[застрявший платеж]]></item>
-        <item><![CDATA[остался %1$s блок]]></item>
-        <item><![CDATA[осталось %1$s блока]]></item>
-        <item><![CDATA[осталось %1$s блоков]]></item>
     </array>
 
     <!-- opening a new channel -->
@@ -327,4 +323,18 @@
     <string name="olympus_log_refunding_tx">Сохранена отложенная возвратная транзакция</string>
     <string name="notify_body">Приложение остается открытым, чтобы получить %1$s</string>
     <string name="notify_title">Ожидается платеж-молния</string>
+
+    <!-- hosted channels -->
+    <string name="err_ln_hosted_local">Local error: %1$s</string>
+    <string name="err_ln_hosted_remote">Remote error: %1$s</string>
+    <string name="err_ln_hosted_wrong_balance">incorrect updated balance</string>
+    <string name="err_ln_hosted_wrong_blockday">incorrect updated blockday</string>
+    <string name="err_ln_hosted_wrong_host_sig">incorrect remote signature</string>
+    <string name="err_ln_hosted_wrong_client_sig">incorrect local signature</string>
+    <string name="err_ln_hosted_wrong_host_number">incorrect host update number</string>
+    <string name="err_ln_hosted_wrong_client_number">incorrect client update number</string>
+    <string name="err_ln_hosted_update_block_too_high">incorrect channel update block number</string>
+    <string name="err_ln_hosted_update_cltv_too_low">incorrect channel update cltv expiry</string>
+    <string name="err_ln_hosted_wrong_in_flight">incorrect number of in-flight payments</string>
+    <string name="err_ln_hosted_too_many_updates">too many state updates</string>
 </resources>

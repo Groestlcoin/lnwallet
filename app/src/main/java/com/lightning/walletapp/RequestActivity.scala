@@ -31,8 +31,8 @@ object QRGen {
   hints.put(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.M)
   hints.put(EncodeHintType.MARGIN, 1)
 
-  def get(bech32Text: String, size: Int): Bitmap = {
-    val bitMatrix = writer.encode(bech32Text.toUpperCase, BarcodeFormat.QR_CODE, size, size, hints)
+  def get(data: String, size: Int): Bitmap = {
+    val bitMatrix = writer.encode(data, BarcodeFormat.QR_CODE, size, size, hints)
     val wid \ height = Tuple2(bitMatrix.getWidth, bitMatrix.getHeight)
     val pixels = new Array[Int](wid * height)
 
@@ -65,21 +65,21 @@ class RequestActivity extends TimerActivity { me =>
 
   def INIT(state: Bundle) = if (app.isAlive) {
     setContentView(R.layout.activity_qr_request)
-    // Snapshot target hash, data will be erased soon
-    val targetPayHash = app.TransData.value match {
+    // Snapshot hash here, data will be erased soon
+    val targetHash = app.TransData.value match {
       case pr: PaymentRequest => pr.paymentHash
       case _ => ByteVector.empty
     }
 
     val receivedListener = new ChannelListener {
-      override def onSettled(chan: Channel, cs: Commitments) = for {
-        updateAddHtlc <- cs.localCommit.spec.fulfilledIncoming
-        if updateAddHtlc.paymentHash == targetPayHash
+      override def onSettled(cs: Commitments) = for {
+        updateAddHtlc <- cs.localSpec.fulfilledIncoming
+        if updateAddHtlc.paymentHash == targetHash
       } showPaid.run
     }
 
     app.TransData checkAndMaybeErase {
-      case pr: PaymentRequest => showInfo(drawAll(denom asString pr.amount.get, getString(ln_qr_disposable).html), PaymentRequest write pr)
+      case pr: PaymentRequest => showInfo(drawAll(denom.asString(pr.amount.get), getString(ln_qr_disposable).html), PaymentRequest.write(pr).toUpperCase)
       case onChainAddress: Address => showInfo(drawBottom(Utils humanSix onChainAddress.toString), onChainAddress.toString)
       case _ => finish
     }

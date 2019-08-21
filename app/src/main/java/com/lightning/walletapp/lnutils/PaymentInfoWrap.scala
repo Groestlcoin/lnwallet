@@ -3,10 +3,9 @@ package com.lightning.walletapp.lnutils
 import spray.json._
 import com.lightning.walletapp.ln._
 import com.lightning.walletapp.ln.wire._
-import com.lightning.walletapp.ln.Tools._
-import com.lightning.walletapp.ln.Channel._
 import com.lightning.walletapp.ln.LNParams._
 import com.lightning.walletapp.ln.PaymentInfo._
+import com.lightning.walletapp.ln.NormalChannel._
 import com.lightning.walletapp.lnutils.JsonHttpUtils._
 import com.lightning.walletapp.lnutils.ImplicitConversions._
 import com.lightning.walletapp.lnutils.ImplicitJsonFormats._
@@ -38,12 +37,12 @@ object PaymentInfoWrap extends PaymentInfoBag with ChannelListener { me =>
   }
 
   def resolvePending =
-    if (app.kit.peerGroup.numConnectedPeers > 0)
-      if (ChannelManager.currentBlocksLeft < Int.MaxValue)
-        // When uncapable chan becomes online: persists, waits for capable channel
-        // When no routes found or any other error happens: gets removed in failOnUI
-        // When accepted by channel: gets removed in outPaymentAccepted
-        unsentPayments.values foreach fetchAndSend
+    if (ChannelManager.currentBlocksLeft.isDefined) {
+      // When uncapable chan becomes online: persists, waits for capable channel
+      // When no routes found or any other error happens: gets removed in failOnUI
+      // When accepted by channel: gets removed in outPaymentAccepted
+      unsentPayments.values foreach fetchAndSend
+    }
 
   def extractPreimage(candidateTx: Transaction) = {
     val fulfills = candidateTx.txIn.map(_.witness.stack) collect {
@@ -81,7 +80,7 @@ object PaymentInfoWrap extends PaymentInfoBag with ChannelListener { me =>
   }
 
   def recordRoutingDataWithPr(extraRoutes: Vector[PaymentRoute], sum: MilliSatoshi, preimage: ByteVector, description: String): RoutingData = {
-    val pr = PaymentRequest(chainHash, Some(sum), Crypto sha256 preimage, nodePrivateKey, description, Some(app.kit.currentAddress.toString), extraRoutes)
+    val pr = PaymentRequest(chainHash, amount = Some(sum), Crypto sha256 preimage, nodePrivateKey, description, fallbackAddress = None, extraRoutes)
     val rd = emptyRD(pr, sum.amount, useCache = true, airLeft = 0)
 
     db.change(PaymentTable.newVirtualSql, rd.queryText, pr.paymentHash)
@@ -93,10 +92,9 @@ object PaymentInfoWrap extends PaymentInfoBag with ChannelListener { me =>
     rd
   }
 
-  def markFailedAndFrozen = db txWrap {
-    db.change(PaymentTable.updFailWaitingAndFrozenSql, System.currentTimeMillis - PaymentRequest.expiryTag.seconds * 1000L)
-    for (activeInFlightPaymentHash <- ChannelManager.activeInFlightHashes) updStatus(WAITING, activeInFlightPaymentHash)
-    for (frozenPaymentHash <- ChannelManager.frozenInFlightHashes) updStatus(FROZEN, frozenPaymentHash)
+  def markFailedPayments = db txWrap {
+    db.change(PaymentTable.updFailWaitingSql, System.currentTimeMillis - PaymentRequest.expiryTag.seconds * 1000L)
+    for (activeInFlightHash <- ChannelManager.activeInFlightHashes) updStatus(WAITING, activeInFlightHash)
   }
 
   def failOnUI(rd: RoutingData) = {
@@ -122,24 +120,18 @@ object PaymentInfoWrap extends PaymentInfoBag with ChannelListener { me =>
     }
   }
 
-  override def onSettled(chan: Channel, cs: Commitments) = {
-    // We have got their commit sig and may have settled payments
-
-    def newRoutesOrGiveUp(rd: RoutingData) =
+  override def onSettled(cs: Commitments) = {
+    def newRoutesOrGiveUp(rd: RoutingData): Unit =
       if (rd.callsLeft > 0 && ChannelManager.checkIfSendable(rd).isRight) {
         // We don't care about AIR or multipart here, supposedly it's one of them
         me fetchAndSend rd.copy(callsLeft = rd.callsLeft - 1, useCache = false)
-      } else {
-        // UI will be updated a bit later here
-        updStatus(FAILURE, rd.pr.paymentHash)
-        chan process CMDPaymentGiveUp(rd)
-      }
+      } else updStatus(FAILURE, rd.pr.paymentHash)
 
     db txWrap {
-      cs.localCommit.spec.fulfilledIncoming foreach updOkIncoming
+      cs.localSpec.fulfilledIncoming foreach updOkIncoming
       // Malformed payments are returned by our direct peer and should never be retried again
-      for (Htlc(false, add) <- cs.localCommit.spec.malformed) updStatus(FAILURE, add.paymentHash)
-      for (Htlc(false, add) \ failReason <- cs.localCommit.spec.failed) {
+      for (Htlc(false, add) <- cs.localSpec.malformed) updStatus(FAILURE, add.paymentHash)
+      for (Htlc(false, add) \ failReason <- cs.localSpec.failed) {
 
         val rdOpt = acceptedPayments get add.paymentHash
         rdOpt map parseFailureCutRoutes(failReason) match {
@@ -151,32 +143,33 @@ object PaymentInfoWrap extends PaymentInfoBag with ChannelListener { me =>
             ChannelManager.sendEither(useFirstRoute(rd1.routes, rd1), newRoutesOrGiveUp)
 
           case _ =>
-            // May happen after app restart
-            // also when recipient sends an error
+            // May happen after app has been restarted
+            // also when someone sends an unparsable error
             updStatus(FAILURE, add.paymentHash)
         }
       }
     }
 
     uiNotify
-    if (cs.localCommit.spec.fulfilled.nonEmpty) com.lightning.walletapp.Vibrator.vibrate
-    if (cs.localCommit.spec.fulfilledOutgoing.nonEmpty) app.olympus.tellClouds(OlympusWrap.CMDStart)
-    if (cs.localCommit.spec.fulfilledIncoming.nonEmpty) getCerberusActs(getVulnerableRevMap) foreach app.olympus.tellClouds
+    if (cs.localSpec.fulfilled.nonEmpty) com.lightning.walletapp.Vibrator.vibrate
+    if (cs.localSpec.fulfilledOutgoing.nonEmpty) app.olympus.tellClouds(OlympusWrap.CMDStart)
+    if (cs.localSpec.fulfilledIncoming.nonEmpty) getVulnerableRevActs.foreach(app.olympus.tellClouds)
   }
 
-  def getVulnerableRevMap =
-    ChannelManager.all.filter(isOperational)
-      .flatMap(getVulnerableRevVec).toMap
+  def getVulnerableRevActs = {
+    val operational = ChannelManager.all.filter(isOperational)
+    getCerberusActs(operational.flatMap(getVulnerableRevVec).toMap)
+  }
 
-  def getVulnerableRevVec(chan: Channel) = chan.hasCsOr(some => {
-    // Find previous channel states which peer might be now tempted to spend
-    val threshold = some.commitments.remoteCommit.spec.toRemoteMsat - dust.amount * 20 * 1000L
-    def toTxidAndInfo(rc: RichCursor) = Tuple2(rc string RevokedInfoTable.txId, rc string RevokedInfoTable.info)
-    RichCursor apply db.select(RevokedInfoTable.selectLocalSql, some.commitments.channelId, threshold) vec toTxidAndInfo
-  }, Vector.empty)
+  def getVulnerableRevVec(chan: Channel) =
+    chan.getCommits collect { case nc: NormalCommits =>
+      // Find previous channel states which peer might now be tempted to spend
+      val threshold = nc.remoteCommit.spec.toRemoteMsat - dust.amount * 20 * 1000L
+      def toTxidAndInfo(rc: RichCursor) = Tuple2(rc string RevokedInfoTable.txId, rc string RevokedInfoTable.info)
+      RichCursor apply db.select(RevokedInfoTable.selectLocalSql, nc.channelId, threshold) vec toTxidAndInfo
+    } getOrElse Vector.empty
 
-  type TxIdAndRevInfoMap = Map[String, String]
-  def getCerberusActs(infos: TxIdAndRevInfoMap) = {
+  def getCerberusActs(infos: Map[String, String] = Map.empty) = {
     // Remove currently pending infos and limit max number of uploads
     val notPendingInfos = infos -- app.olympus.pendingWatchTxIds take 100
 
@@ -197,12 +190,13 @@ object PaymentInfoWrap extends PaymentInfoBag with ChannelListener { me =>
   }
 
   override def onProcessSuccess = {
-    // We don't allow manual deletion here as funding may not be on a blockchain
-    case (_, wbr: WaitBroadcastRemoteData, _: CMDBestHeight) if wbr.isLost =>
+    case (_: NormalChannel, wbr: WaitBroadcastRemoteData, CMDChainTipKnown) if wbr.isLost =>
+      // We don't allow manual deletion here as funding may just not be locally visible yet
       app.kit.wallet.removeWatchedScripts(app.kit fundingPubScript wbr)
       db.change(ChannelTable.killSql, wbr.commitments.channelId)
 
-    case (_, close: ClosingData, _: CMDBestHeight) if close.canBeRemoved =>
+    case (_: NormalChannel, close: ClosingData, CMDChainTipKnown) if close.canBeRemoved =>
+      // Either a lot of time has passed or ALL closing transactions have enough confirmations
       app.kit.wallet.removeWatchedScripts(app.kit closingPubKeyScripts close)
       app.kit.wallet.removeWatchedScripts(app.kit fundingPubScript close)
       db.change(RevokedInfoTable.killSql, close.commitments.channelId)
@@ -210,9 +204,13 @@ object PaymentInfoWrap extends PaymentInfoBag with ChannelListener { me =>
   }
 
   override def onBecome = {
-    case (_, _, SLEEPING, OPEN) => resolvePending
-    case (_, _, WAIT_FUNDING_DONE, OPEN) => app.olympus tellClouds OlympusWrap.CMDStart
-    case (_, _, from, CLOSING) if from != CLOSING => runAnd(markFailedAndFrozen)(uiNotify)
+    case (_, _, SLEEPING, OPEN) =>
+      // We may have some payments waiting
+      resolvePending
+
+    case (_, _, WAIT_FUNDING_DONE, OPEN) =>
+      // We may have a channel upload act waiting
+      app.olympus tellClouds OlympusWrap.CMDStart
   }
 }
 
@@ -223,15 +221,18 @@ object ChannelWrap {
     db.change(ChannelTable.updSql, data, chanId)
   }
 
-  def put(data: HasCommitments) = {
-    val raw = "1" + data.toJson.toString
-    doPut(data.commitments.channelId, raw)
+  def put(data: ChannelData) = data match {
+    case hasNorm: HasNormalCommits => doPut(hasNorm.commitments.channelId, '1' + hasNorm.toJson.toString)
+    case hostedCommits: HostedCommits => doPut(hostedCommits.channelId, '2' + hostedCommits.toJson.toString)
+    case otherwise => throw new RuntimeException(s"Can not presist this channel data type: $otherwise")
   }
 
-  def doGet(database: LNOpenHelper) = {
-    val rc = RichCursor(database select ChannelTable.selectAllSql)
-    rc.vec(_ string ChannelTable.data substring 1) map to[HasCommitments]
-  }
+  def doGet(database: LNOpenHelper) =
+    RichCursor(database select ChannelTable.selectAllSql).vec(_ string ChannelTable.data) map {
+      case rawChanData if '1' == rawChanData.head => to[HasNormalCommits](rawChanData substring 1)
+      case rawChanData if '2' == rawChanData.head => to[HostedCommits](rawChanData substring 1)
+      case otherwise => throw new RuntimeException(s"Can not deserialize: $otherwise")
+    }
 }
 
 object RouteWrap {

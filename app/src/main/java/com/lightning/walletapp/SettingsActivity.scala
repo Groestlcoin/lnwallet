@@ -5,9 +5,9 @@ import com.lightning.walletapp.ln._
 import com.lightning.walletapp.Utils._
 import com.lightning.walletapp.ln.Tools._
 import com.lightning.walletapp.R.string._
-import com.lightning.walletapp.ln.Channel._
 import com.lightning.walletapp.ln.LNParams._
 import com.google.android.gms.auth.api.signin._
+import com.lightning.walletapp.ln.NormalChannel._
 import com.lightning.walletapp.lnutils.JsonHttpUtils._
 import com.lightning.walletapp.lnutils.ImplicitConversions._
 import com.lightning.walletapp.lnutils.ImplicitJsonFormats._
@@ -122,7 +122,6 @@ class SettingsActivity extends TimerActivity with HumanTimeDisplay { me =>
 
   def onFpTap(cb: View) = fpAuthentication.isChecked match {
     case true if VERSION.SDK_INT < VERSION_CODES.M => runAnd(fpAuthentication setChecked false)(app toast fp_no_support)
-    case true if !FingerPrint.isPermissionGranted => runAnd(fpAuthentication setChecked false)(FingerPrint askPermission me)
     case true if !gf.hasFingerprintHardware => runAnd(fpAuthentication setChecked false)(app toast fp_no_support)
     case true if !gf.hasEnrolledFingerprint => runAnd(fpAuthentication setChecked false)(app toast fp_add_print)
     case mode => FingerPrint switch mode
@@ -154,7 +153,7 @@ class SettingsActivity extends TimerActivity with HumanTimeDisplay { me =>
   def INIT(s: Bundle) = if (app.isAlive) {
     me setContentView R.layout.activity_settings
     me initToolbar findViewById(R.id.toolbar).asInstanceOf[Toolbar]
-    getSupportActionBar setSubtitle "App version 0.3-133"
+    getSupportActionBar setSubtitle "App version 0.3-134"
     getSupportActionBar setTitle wallet_settings
     updateTrustedView
     updateBackupView
@@ -264,7 +263,7 @@ class SettingsActivity extends TimerActivity with HumanTimeDisplay { me =>
           encryptedHexBackup <- backups
           encryptedBackupBytes = ByteVector.fromValidHex(encryptedHexBackup).toArray
           ref <- AES.decBytes(encryptedBackupBytes, cloudSecret.toArray) map bin2readable map to[RefundingData]
-          if ChannelManager.all.forall(_.hasCsOr(_.commitments.channelId, null) != ref.commitments.channelId)
+          if !ChannelManager.all.exists(_.getCommits.map(_.channelId) contains ref.commitments.channelId)
         } ChannelManager.all +:= ChannelManager.createChannel(ChannelManager.operationalListeners, ref)
 
         for {
@@ -286,8 +285,8 @@ class SettingsActivity extends TimerActivity with HumanTimeDisplay { me =>
       mkCheckForm(alert => rm(alert)(go), none, bld, dialog_next, dialog_cancel)
     }
 
-    // Wallet may not see incoming txs immediately if channel gets broken while not synched
-    recoverFunds.setEnabled(ChannelManager.currentBlocksLeft < broadcaster.blocksPerDay)
+    // Wallet may not notice incoming tx until synchronized
+    recoverFunds.setEnabled(ChannelManager.blockDaysLeft <= 1)
   } else me exitTo classOf[MainActivity]
 
   def updateBackupView = {
