@@ -68,18 +68,13 @@ class FragLNStart extends Fragment with SearchBar with HumanTimeDisplay { me =>
   override def onCreateView(inf: LayoutInflater, vg: ViewGroup, bn: Bundle) = inf.inflate(R.layout.frag_ln_start, vg, false)
   val testnet = BuildConfig.APPLICATION_ID.contains("testnet")
 
-  val bitrefillKey = PublicKey.fromValidHex("030c3f19d742ca294a55c00376b3b355c3c90d61c6b6b39554dbc7ac19b141c14f")
-  val liteGoKey = PublicKey.fromValidHex("029aee02904d4e419770b93c1b07aae2814a79032e23cafb4024cbea6fb71be106")
-  val acinqKey = PublicKey.fromValidHex("03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f")
+  val acinqKey = if(testnet) PublicKey.fromValidHex("0384dee0ec597a7b8235ccf56c68ffa0af5dae72b3455aa3ecb81c4fc4eef9ef2c") else  PublicKey.fromValidHex("0391c8d0e27fe61ed8cb8784aeae5848bd8b193ea5720dea32ca2694a326fe41f9")
 
-  val bitrefillNa = app.mkNodeAnnouncement(bitrefillKey, NodeAddress.fromParts("52.50.244.44", 9735), "Bitrefill")
-  val liteGoNa = app.mkNodeAnnouncement(liteGoKey, NodeAddress.fromParts("195.154.169.49", 9735), "LiteGo")
-  val acinqNa = app.mkNodeAnnouncement(acinqKey, NodeAddress.fromParts("34.239.230.56", 9735), "ACINQ")
+  val acinqNa = app.mkNodeAnnouncement(acinqKey, NodeAddress.fromParts(if(testnet) "95.179.140.39" else "104.236.133.196", 9735), "Groestlcoin Node")
 
-  val bitrefill = HardcodedNodeView(bitrefillNa, "<i>bitrefill.com</i>")
-  val acinq = HardcodedNodeView(acinqNa, "<i>strike.acinq.co</i>")
-  val liteGo = HardcodedNodeView(liteGoNa, "<i>litego.io</i>")
-  val hardcodedNodes = if(testnet) Vector(acinq, bitrefill, liteGo) else Vector()
+  val acinq = HardcodedNodeView(acinqNa, "<i>Groestlcoin.org</i>")
+
+  val hardcodedNodes = if(!testnet) Vector(acinq) else Vector(acinq)
 
   lazy val host = me.getActivity.asInstanceOf[LNStartActivity]
   private[this] var nodes = Vector.empty[StartNodeView]
