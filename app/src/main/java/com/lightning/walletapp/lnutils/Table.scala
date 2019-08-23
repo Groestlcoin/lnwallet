@@ -186,8 +186,9 @@ extends SQLiteOpenHelper(context, name, null, 5) {
     // Randomize an order of two available default servers
     val (ord1, ord2) = if (random.nextBoolean) ("0", "1") else ("1", "0")
     val emptyData = CloudData(info = None, tokens = Vector.empty, acts = Vector.empty).toJson.toString
-    val dev1: Array[AnyRef] = Array("server-1", "https://a.lightning-wallet.com:9103", emptyData, "1", ord1, "0")
-    val dev2: Array[AnyRef] = Array("server-2", "https://b.lightning-wallet.com:9103", emptyData, "0", ord2, "1")
+    val testnet = BuildConfig.APPLICATION_ID.contains("testnet")
+    val dev1: Array[AnyRef] = Array("server-1", if(!testnet) "https://olympus1.groestlcoin.org:9203" else "https://olympus-test1.groestlcoin.org:9203", emptyData, "1", ord1, "0")
+    val dev2: Array[AnyRef] = Array("server-2", if(!testnet) "https://olympus2.groestlcoin.org:9203" else "https://olympus-test2.groestlcoin.org:9203", emptyData, "0", ord2, "1")
     dbs.execSQL(OlympusTable.newSql, dev1)
     dbs.execSQL(OlympusTable.newSql, dev2)
   }
