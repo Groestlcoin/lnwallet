@@ -68,13 +68,45 @@ class FragLNStart extends Fragment with SearchBar with HumanTimeDisplay { me =>
   override def onCreateView(inf: LayoutInflater, vg: ViewGroup, bn: Bundle) = inf.inflate(R.layout.frag_ln_start, vg, false)
   val testnet = BuildConfig.APPLICATION_ID.contains("testnet")
 
-  val acinqKey = if(testnet) PublicKey.fromValidHex("0384dee0ec597a7b8235ccf56c68ffa0af5dae72b3455aa3ecb81c4fc4eef9ef2c") else  PublicKey.fromValidHex("0391c8d0e27fe61ed8cb8784aeae5848bd8b193ea5720dea32ca2694a326fe41f9")
+  //Testnet
+  val testGRSPayKey = PublicKey.fromValidHex("0384dee0ec597a7b8235ccf56c68ffa0af5dae72b3455aa3ecb81c4fc4eef9ef2c")
+  val testGRSPayNa = app.mkNodeAnnouncement(testGRSPayKey, NodeAddress.fromParts("95.179.140.39", 9735), "testnet grspay")
+  val testGRSPay = HardcodedNodeView(testGRSPayNa, "<i>testnet.grspay.com</i>")
 
-  val acinqNa = app.mkNodeAnnouncement(acinqKey, NodeAddress.fromParts(if(testnet) "95.179.140.39" else "104.236.133.196", 9735), "Groestlcoin Node")
+  val testElectrumKey = PublicKey.fromValidHex("02435dea09ad875c36c88f680845277245e7e8bdd28b3bb20470e82e4de0c3cb09")
+  val testElectrumNa = app.mkNodeAnnouncement(testElectrumKey, NodeAddress.fromParts("45.32.236.128", 9735), "electrum-test1")
+  val testElectrumPay = HardcodedNodeView(testElectrumNa, "<i>electrum-test1.groestlcoin.org</i>")
 
-  val acinq = HardcodedNodeView(acinqNa, "<i>Groestlcoin.org</i>")
+  val testLNKey = PublicKey.fromValidHex("03397476b50dae183eed13537b01a303991462bea35b08afb4232e19ae5fa78a2e")
+  val testLNNa = app.mkNodeAnnouncement(testLNKey, NodeAddress.fromParts("45.32.235.71", 9735), "lntestnet")
+  val testLNPay = HardcodedNodeView(testLNNa, "<i>lntestnet.groestlcoin.org</i>")
 
-  val hardcodedNodes = if(!testnet) Vector(acinq) else Vector(acinq)
+  val testOlympus1Key = PublicKey.fromValidHex("024d7eff7ab880adf0c69384453e999c01e1b10d6d22c1b52f9ba01e613d40e502")
+  val testOlympus1Na = app.mkNodeAnnouncement(testOlympus1Key, NodeAddress.fromParts("95.179.156.115", 9196), "olympus-test1")
+  val testOlympus1 = HardcodedNodeView(testOlympus1Na, "<i>olympus-test1.groestlcoin.org</i>")
+
+  val testOlympus2Key = PublicKey.fromValidHex("021fedfc02b43971339bf9052e2c639e182be6565435d1606761718352be666f15")
+  val testOlympus2Na = app.mkNodeAnnouncement(testOlympus2Key, NodeAddress.fromParts("108.61.99.169", 9196), "olympus-test2")
+  val testOlympus2 = HardcodedNodeView(testOlympus2Na, "<i>olympus-test2.groestlcoin.org</i>")
+
+  //Mainnet
+  val GRSPayKey = PublicKey.fromValidHex("0391c8d0e27fe61ed8cb8784aeae5848bd8b193ea5720dea32ca2694a326fe41f9")
+  val GRSPayNa = app.mkNodeAnnouncement(GRSPayKey, NodeAddress.fromParts("104.236.133.196", 9735), "grspay")
+  val GRSPay = HardcodedNodeView(GRSPayNa, "<i>grspay.com</i>")
+
+  val LNKey = PublicKey.fromValidHex("03046e1650b0e67925d260f4888f809598af6cef58fbfc6446fbd4fddf1828ca3d")
+  val LNNa = app.mkNodeAnnouncement(LNKey, NodeAddress.fromParts("104.236.130.222", 9735), "lnmainnet")
+  val LNPay = HardcodedNodeView(LNNa, "<i>lnmainnet.groestlcoin.org</i>")
+
+  val olympus1Key = PublicKey.fromValidHex("0226cbef3bef64405046de9fb182acb0fd344e535b524c6e98d2a9131235b8390b")
+  val olympus1Na = app.mkNodeAnnouncement(olympus1Key, NodeAddress.fromParts("82.196.11.189", 9196), "olympus1")
+  val olympus1 = HardcodedNodeView(olympus1Na, "<i>olympus1.groestlcoin.org</i>")
+
+  val olympus2Key = PublicKey.fromValidHex("02576fe2dfc26879c751a38f69a1e6b6d6646fa3edf045d5534d8674a188c7da81")
+  val olympus2Na = app.mkNodeAnnouncement(olympus2Key, NodeAddress.fromParts("82.196.13.206", 9176), "olympus2")
+  val olympus2 = HardcodedNodeView(olympus2Na, "<i>olympus2.groestlcoin.org</i>")
+
+  val hardcodedNodes = if(!testnet) Vector(GRSPay, LNPay, olympus1, olympus2) else Vector(testGRSPay, testElectrumPay, testLNPay, testOlympus1, testOlympus2)
 
   lazy val host = me.getActivity.asInstanceOf[LNStartActivity]
   private[this] var nodes = Vector.empty[StartNodeView]
