@@ -2,6 +2,9 @@ apply plugin: "com.android.application"
 apply plugin: "jp.leafytree.android-scala"
 apply plugin: 'androidsvgdrawable'
 
+ext {
+    archivesBaseName = "groestlcoin-lnwallet"
+}
 
 android {
     compileSdkVersion 28
