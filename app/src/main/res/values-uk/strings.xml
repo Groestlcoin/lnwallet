@@ -108,9 +108,9 @@
     <string name="dialog_pr_expired">Цей платіжний запит застарів</string>
     <string name="dialog_sum_small">Сума занадто мала</string>
     <string name="dialog_sum_big">Сума занадто велика</string>
-    <string name="dialog_pay_offchain">Off-chain</string>
     <string name="dialog_pay_onchain">On-chain</string>
     <string name="dialog_share_key">Share key</string>
+    <string name="dialog_close">Закрити апп</string>
     <string name="dialog_cancel">Скасувати</string>
     <string name="dialog_opt_out">Opt out</string>
     <string name="dialog_retry">Ще раз</string>
@@ -198,6 +198,7 @@
     <string name="err_ln_peer_offline">Помилка з\'єднання з %1$s</string>
     <string name="err_ln_peer_incompatible">%1$s не підтримує захист від втрати даних</string>
     <string name="err_ln_chain_disconnected">Створення каналу скасовано тому що он-чейн гаманець в офлайні</string>
+    <string name="err_ln_chan_exists_already">Відкритий канал із цим піром вже існує, будь ласка, спробуйте інший вузол</string>
     <string name="err_ln_local_amount_high">Не вийшло тому що після додавання комісії сума платежу стає занадто високою для каналу</string>
     <string name="err_ln_remote_amount_high">Не вийшло тому що після додавання комісії сума платежу стає занадто високою для вашого пiра</string>
     <string name="err_ln_remote_amount_low">Не вийшло тому що сума платежу занадто низька для вашого пiра</string>
@@ -310,11 +311,13 @@
     <string name="ln_ops_start_fund_node_view"><![CDATA[<strong>%1$s</strong><br><font color=#999999><i>відчинення каналу</i></font><br>%2$s<br><br><font color=#999999>ID піра</font><br><small>%3$s</small>]]></string>
     <string name="ln_ops_start_node_view"><![CDATA[<strong>%1$s</strong><br>%2$s<br><small><font color=#999999>%3$s</font></small>]]></string>
     <string name="ln_ops_start_fund_incoming_channel">вхідний канал</string>
+
     <string name="ln_url_resolving">Підключення до сервісу&#8230;</string>
+    <string name="ln_url_login_ok"><![CDATA[Успiшний логін на <i>%1$s</i>]]></string>
 
     <string name="ln_url_info_login"><![CDATA[
-        Логiн-ключ для <i>%1$s</i>, згенерований вашим гаманцем:<br><br><strong>%2$s</strong><br><br>
-        Цей ключ можно розкрити, але його рекомендується передавати тiльки <i>%3$s</i>
+        Логiн-ключ для <i>%1$s</i> згенерований вашим гаманцем:<br><br><strong>%2$s</strong><br><br>
+        Його буде використано для анонiмної авторизації на <i>%1$s</i> без розкриття ваших особистих даних.
     ]]></string>
 
     <!-- Olympus log messages and notification -->
@@ -325,15 +328,12 @@
     <string name="notify_title">Очікується платіж-Блискавка</string>
 
     <!-- hosted channels -->
-    <string name="err_ln_hosted_local">Local error: %1$s</string>
-    <string name="err_ln_hosted_remote">Remote error: %1$s</string>
-    <string name="err_ln_hosted_wrong_balance">incorrect updated balance</string>
+    <string name="err_ln_hosted_wrong_remote_balance">incorrect updated balance</string>
     <string name="err_ln_hosted_wrong_blockday">incorrect updated blockday</string>
-    <string name="err_ln_hosted_wrong_host_sig">incorrect remote signature</string>
-    <string name="err_ln_hosted_wrong_client_sig">incorrect local signature</string>
-    <string name="err_ln_hosted_wrong_host_number">incorrect host update number</string>
-    <string name="err_ln_hosted_wrong_client_number">incorrect client update number</string>
-    <string name="err_ln_hosted_update_block_too_high">incorrect channel update block number</string>
+    <string name="err_ln_hosted_wrong_remote_sig">incorrect remote signature</string>
+    <string name="err_ln_hosted_wrong_local_sig">incorrect local signature</string>
+    <string name="err_ln_hosted_wrong_remote_number">incorrect host update number</string>
+    <string name="err_ln_hosted_wrong_local_number">incorrect client update number</string>
     <string name="err_ln_hosted_update_cltv_too_low">incorrect channel update cltv expiry</string>
     <string name="err_ln_hosted_wrong_in_flight">incorrect number of in-flight payments</string>
     <string name="err_ln_hosted_too_many_updates">too many state updates</string>

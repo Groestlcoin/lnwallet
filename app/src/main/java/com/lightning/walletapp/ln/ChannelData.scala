@@ -10,7 +10,7 @@ import com.lightning.walletapp.ln.LNParams.broadcaster._
 import com.lightning.walletapp.ln.CommitmentSpec.{HtlcAndFail, HtlcAndFulfill}
 import com.lightning.walletapp.ln.crypto.{Generators, ShaChain, ShaHashesWithIndex}
 import com.lightning.walletapp.ln.Helpers.Closing.{SuccessAndClaim, TimeoutAndClaim}
-import com.lightning.walletapp.ln.wire.LightningMessageCodecs.{HTLCTuple, LNMessageVector, RedeemScriptAndSig}
+import com.lightning.walletapp.ln.wire.LightningMessageCodecs.{LNMessageVector, RedeemScriptAndSig}
 import fr.acinq.bitcoin.{Satoshi, Transaction}
 import org.bitcoinj.core.Batch
 import scodec.bits.ByteVector
@@ -19,7 +19,6 @@ import fr.acinq.eclair.UInt64
 
 sealed trait Command
 case class CMDShutdown(scriptPubKey: Option[ByteVector] = None) extends Command
-case class CMDChannelUpdate(upd: ChannelUpdate) extends Command
 case class CMDStateOverride(so: StateOverride) extends Command
 case class CMDConfirmed(tx: Transaction) extends Command
 case class CMDFunding(tx: Transaction) extends Command
@@ -51,8 +50,10 @@ case class WaitTheirHostedReply(announce: NodeAnnouncement, refundScriptPubKey: 
   lazy val initMsg = InvokeHostedChannel(LNParams.chainHash, refundScriptPubKey)
 }
 
-case class WaitTheirStateUpdate(announce: NodeAnnouncement, refundScriptPubKey: ByteVector,
-                                clientFirstUpdate: StateUpdate, init: InitHostedChannel) extends ChannelData
+case class WaitTheirHostedStateUpdate(announce: NodeAnnouncement,
+                                      refundScriptPubKey: ByteVector,
+                                      firstLocalStateUpdate: StateUpdate,
+                                      init: InitHostedChannel) extends ChannelData
 
 // INCOMING CHANNEL
 
@@ -120,10 +121,8 @@ case class ClosingData(announce: NodeAnnouncement,
 
   lazy val commitTxs = realTier12Closings.map(_.commitTx)
   lazy val realTier12Closings = revokedCommit ++ localCommit ++ remoteCommit ++ nextRemoteCommit ++ refundRemoteCommit
-  def canBeRemoved: Boolean = if (System.currentTimeMillis > closedAt + 1000L * 3600 * 24 * 28) true else bestClosing match {
-    case MutualCommitPublished(closingTx) => getStatus(closingTx.txid) match { case confs \ isDead => confs > minDepth || isDead }
-    case info => info.getState.map(_.txn.txid).map(getStatus) forall { case confs \ isDead => confs > minDepth || isDead }
-  }
+  def canBeRemoved: Boolean = System.currentTimeMillis > closedAt + 1000L * 3600 * 24 * 28
+  def tier12States: Seq[PublishStatus] = realTier12Closings.flatMap(_.getState)
 
   def bestClosing: CommitPublished = {
     // At least one closing is guaranteed to be here
@@ -133,9 +132,6 @@ case class ClosingData(announce: NodeAnnouncement,
       if (isDead) -txDepth else txDepth
     }
   }
-
-  // Not a lazy val because results depend on blockchain state
-  def tier12States = realTier12Closings.flatMap(_.getState)
 }
 
 sealed trait CommitPublished {
@@ -200,10 +196,7 @@ case class RevocationInfo(redeemScriptsToSigs: List[RedeemScriptAndSig],
 
 // COMMITMENTS
 
-case class Htlc(incoming: Boolean, add: UpdateAddHtlc) {
-  lazy val tuple: HTLCTuple = (incoming, add.id, add.amountMsat, add.paymentHash, add.expiry)
-}
-
+case class Htlc(incoming: Boolean, add: UpdateAddHtlc)
 case class CommitmentSpec(feeratePerKw: Long, toLocalMsat: Long, toRemoteMsat: Long,
                           htlcs: Set[Htlc] = Set.empty, fulfilled: Set[HtlcAndFulfill] = Set.empty,
                           failed: Set[HtlcAndFail] = Set.empty, malformed: Set[Htlc] = Set.empty) {
@@ -374,8 +367,8 @@ case class NormalCommits(localParams: LocalParams, remoteParams: AcceptChannel, 
     // This is our point of view because `ensureSenderCanAffordChange` returns reduced local commits
     val inHtlcs \ inFlight = reduced.directedHtlcsAndSum(incoming = true)
 
+    if (add.amountMsat < 1L) throw new LightningException
     if (add.id != remoteNextHtlcId) throw new LightningException
-    if (add.amountMsat < minHtlcValue.amount) throw new LightningException
     if (inHtlcs.size > localParams.maxAcceptedHtlcs) throw new LightningException
     if (UInt64(inFlight) > localParams.maxHtlcValueInFlightMsat) throw new LightningException
     c1
@@ -489,64 +482,71 @@ case class NormalCommits(localParams: LocalParams, remoteParams: AcceptChannel, 
   }
 }
 
-case class HostedCommits(announce: NodeAnnouncement, lastCrossSignedState: LastCrossSignedState, clientUpdatesSoFar: Long,
-                         hostUpdatesSoFar: Long, reSentUpdates: Int, clientChanges: LNMessageVector, hostChanges: LNMessageVector,
+case class HostedCommits(announce: NodeAnnouncement, lastLocalCrossSignedState: LastCrossSignedState, allLocalUpdatesSoFar: Long,
+                         allRemoteUpdatesSoFar: Long, reSentUpdates: Int, localChanges: LNMessageVector, remoteChanges: LNMessageVector,
                          localSpec: CommitmentSpec, updateOpt: Option[ChannelUpdate], localError: Option[Error], remoteError: Option[Error],
-                         startedAt: Long) extends Commitments with ChannelData { me =>
+                         startedAt: Long = System.currentTimeMillis) extends Commitments with ChannelData { me =>
 
   def isInErrorState = localError.isDefined || remoteError.isDefined
-  def addHostProposal(lm: LightningMessage) = copy(hostChanges = hostChanges :+ lm, hostUpdatesSoFar = hostUpdatesSoFar + 1, reSentUpdates = 0)
-  def addClientProposal(lm: LightningMessage) = copy(clientChanges = clientChanges :+ lm, clientUpdatesSoFar = clientUpdatesSoFar + 1, reSentUpdates = 0)
-  lazy val initMsg = InvokeHostedChannel(chainHash, lastCrossSignedState.lastRefundScriptPubKey)
-  val myFullBalanceMsat = localSpec.toLocalMsat
+  def addRemoteProposal(lm: LightningMessage) = copy(remoteChanges = remoteChanges :+ lm, allRemoteUpdatesSoFar = allRemoteUpdatesSoFar + 1, reSentUpdates = 0)
+  def addLocalProposal(lm: LightningMessage) = copy(localChanges = localChanges :+ lm, allLocalUpdatesSoFar = allLocalUpdatesSoFar + 1, reSentUpdates = 0)
+
+  def withoutUnsignedChanges =
+    copy(allLocalUpdatesSoFar = lastLocalCrossSignedState.lastLocalStateUpdate.stateOverride.localUpdatesSoFar,
+      allRemoteUpdatesSoFar = lastLocalCrossSignedState.lastLocalStateUpdate.stateOverride.remoteUpdatesSoFar,
+      localChanges = Vector.empty, remoteChanges = Vector.empty, reSentUpdates = 0)
+
+  lazy val initMsg = InvokeHostedChannel(chainHash, lastLocalCrossSignedState.lastRefundScriptPubKey)
+  lazy val nextLocalReduced = CommitmentSpec.reduce(localSpec, localChanges, remoteChanges)
+  lazy val myFullBalanceMsat = nextLocalReduced.toLocalMsat
   val channelId = announce.hostedChanId
-  val mustReply = reSentUpdates == 0
+  val mustReply = reSentUpdates < 1
 
   def sendAdd(rd: RoutingData) = {
     // Let's add this change and see if the new state violates any of the constraints including those imposed by host on us
-    val add = UpdateAddHtlc(channelId, clientUpdatesSoFar + 1, rd.lastMsat, rd.pr.paymentHash, rd.lastExpiry, rd.onion.packet)
-    val reduced = CommitmentSpec.reduce(localSpec, clientChanges :+ add, hostChanges)
+    val add = UpdateAddHtlc(channelId, allLocalUpdatesSoFar + 1, rd.lastMsat, rd.pr.paymentHash, rd.lastExpiry, rd.onion.packet)
+    val reduced = CommitmentSpec.reduce(localSpec, localChanges :+ add, remoteChanges)
     val inHtlcs \ inFlight = reduced.directedHtlcsAndSum(incoming = false)
 
     if (reduced.toLocalMsat < 0L) throw CMDAddImpossible(rd, ERR_REMOTE_AMOUNT_HIGH)
-    if (UInt64(inFlight) > lastCrossSignedState.initHostedChannel.maxHtlcValueInFlightMsat) throw CMDAddImpossible(rd, ERR_REMOTE_AMOUNT_HIGH)
-    if (rd.firstMsat < lastCrossSignedState.initHostedChannel.htlcMinimumMsat) throw CMDAddImpossible(rd, ERR_REMOTE_AMOUNT_LOW)
-    if (inHtlcs.size > lastCrossSignedState.initHostedChannel.maxAcceptedHtlcs) throw CMDAddImpossible(rd, ERR_TOO_MANY_HTLC)
-    addClientProposal(add) -> add
+    if (UInt64(inFlight) > lastLocalCrossSignedState.initHostedChannel.maxHtlcValueInFlightMsat) throw CMDAddImpossible(rd, ERR_REMOTE_AMOUNT_HIGH)
+    if (rd.firstMsat < lastLocalCrossSignedState.initHostedChannel.htlcMinimumMsat) throw CMDAddImpossible(rd, ERR_REMOTE_AMOUNT_LOW)
+    if (inHtlcs.size > lastLocalCrossSignedState.initHostedChannel.maxAcceptedHtlcs) throw CMDAddImpossible(rd, ERR_TOO_MANY_HTLC)
+    addLocalProposal(add) -> add
   }
 
   def receiveAdd(add: UpdateAddHtlc) = {
-    val reduced = CommitmentSpec.reduce(localSpec, clientChanges, hostChanges :+ add)
+    val reduced = CommitmentSpec.reduce(localSpec, localChanges, remoteChanges :+ add)
     val inHtlcs \ inFlight = reduced.directedHtlcsAndSum(incoming = true)
 
     if (reduced.toRemoteMsat < 0L) throw new LightningException
-    if (add.id != hostUpdatesSoFar + 1) throw new LightningException
-    if (inHtlcs.size > lastCrossSignedState.initHostedChannel.maxAcceptedHtlcs) throw new LightningException
-    if (UInt64(inFlight) > lastCrossSignedState.initHostedChannel.maxHtlcValueInFlightMsat) throw new LightningException
-    addHostProposal(add)
+    if (add.id != allRemoteUpdatesSoFar + 1) throw new LightningException
+    if (inHtlcs.size > lastLocalCrossSignedState.initHostedChannel.maxAcceptedHtlcs) throw new LightningException
+    if (UInt64(inFlight) > lastLocalCrossSignedState.initHostedChannel.maxHtlcValueInFlightMsat) throw new LightningException
+    addRemoteProposal(add)
   }
 
   def makeSignedStateUpdate = {
-    val reduced = CommitmentSpec.reduce(localSpec, clientChanges, hostChanges)
-    val so = StateOverride(reduced.toLocalMsat, broadcaster.currentBlockDay, clientUpdatesSoFar, hostUpdatesSoFar)
-    val htlcs: List[HTLCTuple] = for (Htlc(incoming, add) <- reduced.htlcs.toList) yield (incoming, add.id, add.amountMsat, add.paymentHash, add.expiry)
-    StateUpdate(so, htlcs).signed(announce.hostedChanId, lastCrossSignedState.lastRefundScriptPubKey, lastCrossSignedState.initHostedChannel, nodePrivateKey)
+    val LastCrossSignedState(scriptPubKey, init, _, _) = lastLocalCrossSignedState
+    val so = StateOverride(nextLocalReduced.toLocalMsat, broadcaster.currentBlockDay, allLocalUpdatesSoFar, allRemoteUpdatesSoFar)
+    val inFlight = for (Htlc(incoming, a) <- nextLocalReduced.htlcs) yield InFlightHtlc(incoming, a.id, a.amountMsat, a.paymentHash, a.expiry)
+    StateUpdate(so, inFlight.toList).signed(channelId, scriptPubKey, init, nodePrivateKey)
   }
 
   def receiveFulfill(fulfill: UpdateFulfillHtlc) =
     CommitmentSpec.findHtlcById(localSpec, fulfill.id, isIncoming = false) match {
-      case Some(htlc) if fulfill.paymentHash == htlc.add.paymentHash => addHostProposal(fulfill)
+      case Some(htlc) if fulfill.paymentHash == htlc.add.paymentHash => addRemoteProposal(fulfill)
       case None => throw new LightningException("Peer has fulfilled non-existing payment")
     }
 
   def receiveFail(fail: UpdateFailHtlc) = {
     val notFound = CommitmentSpec.findHtlcById(localSpec, fail.id, isIncoming = false).isEmpty
-    if (notFound) throw new LightningException else addHostProposal(fail)
+    if (notFound) throw new LightningException else addRemoteProposal(fail)
   }
 
   def receiveFailMalformed(fail: UpdateFailMalformedHtlc) = {
     val notFound = CommitmentSpec.findHtlcById(localSpec, fail.id, isIncoming = false).isEmpty
     if (fail.failureCode.&(FailureMessageCodecs.BADONION) == 0) throw new LightningException
-    if (notFound) throw new LightningException else addHostProposal(fail)
+    if (notFound) throw new LightningException else addRemoteProposal(fail)
   }
 }

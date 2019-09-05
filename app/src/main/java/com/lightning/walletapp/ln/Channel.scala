@@ -12,7 +12,7 @@ import java.util.concurrent.Executors
 import fr.acinq.eclair.UInt64
 import scodec.bits.ByteVector
 
-import com.lightning.walletapp.ln.crypto.{Generators, ShaChain, ShaHashesWithIndex, Sphinx}
+import com.lightning.walletapp.ln.crypto.{Generators, ShaChain, ShaHashesWithIndex}
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import com.lightning.walletapp.ln.Helpers.{Closing, Funding}
 import com.lightning.walletapp.ln.Tools.{none, runAnd}
@@ -23,8 +23,7 @@ import scala.util.{Failure, Success, Try}
 
 abstract class Channel(val isHosted: Boolean) extends StateMachine[ChannelData] { me =>
   implicit val context: ExecutionContextExecutor = ExecutionContext fromExecutor Executors.newSingleThreadExecutor
-  def process(change: Any) = Future(me doProcess change) onFailure { case runtimeFailure => events onException me -> runtimeFailure }
-  def shouldRenew(u: ChannelUpdate) = getCommits.flatMap(_.updateOpt).exists(u0 => u0.shortChannelId == u.shortChannelId && u0.timestamp < u.timestamp)
+  def process(change: Any) = Future(me doProcess change) onFailure { case runtimeFailre => events onException me -> runtimeFailre }
 
   def getCommits: Option[Commitments] = data match {
     case normal: HasNormalCommits => Some(normal.commitments)
@@ -51,6 +50,7 @@ abstract class Channel(val isHosted: Boolean) extends StateMachine[ChannelData] 
     // In-flight HTLCs are subtracted here
     estimateCanSend + estimateCanReceive
 
+  var waitingUpdate: Boolean = true
   var permanentOffline: Boolean = true
   var listeners: Set[ChannelListener] = _
   val events: ChannelListener = new ChannelListener {
@@ -79,7 +79,7 @@ abstract class NormalChannel extends Channel(isHosted = false) { me =>
       case (InitData(announce), cmd: CMDOpenChannel, WAIT_FOR_INIT) =>
         BECOME(WaitAcceptData(announce, cmd), WAIT_FOR_ACCEPT) SEND OpenChannel(LNParams.chainHash, cmd.tempChanId,
           cmd.fundingSat, cmd.pushMsat, cmd.localParams.dustLimit.amount, cmd.localParams.maxHtlcValueInFlightMsat,
-          cmd.localParams.channelReserveSat, LNParams.minHtlcValue.amount, cmd.initialFeeratePerKw, cmd.localParams.toSelfDelay,
+          cmd.localParams.channelReserveSat, htlcMinimumMsat = 1L, cmd.initialFeeratePerKw, cmd.localParams.toSelfDelay,
           cmd.localParams.maxAcceptedHtlcs, cmd.localParams.fundingPrivKey.publicKey, cmd.localParams.revocationBasepoint,
           cmd.localParams.paymentBasepoint, cmd.localParams.delayedPaymentBasepoint, cmd.localParams.htlcBasepoint,
           Generators.perCommitPoint(cmd.localParams.shaSeed, index = 0L), cmd.channelFlags)
@@ -111,11 +111,9 @@ abstract class NormalChannel extends Channel(isHosted = false) { me =>
         val firstPerCommitPoint = Generators.perCommitPoint(localParams.shaSeed, 0L)
         val wait = WaitFundingCreatedRemote(announce, localParams, remoteParams, open)
         BECOME(wait, WAIT_FOR_FUNDING) SEND AcceptChannel(open.temporaryChannelId, localParams.dustLimit.amount,
-          localParams.maxHtlcValueInFlightMsat, localParams.channelReserveSat, LNParams.minHtlcValue.amount,
-          minimumDepth = LNParams.minDepth, localParams.toSelfDelay, localParams.maxAcceptedHtlcs,
-          localParams.fundingPrivKey.publicKey, localParams.revocationBasepoint,
-          localParams.paymentBasepoint, localParams.delayedPaymentBasepoint,
-          localParams.htlcBasepoint, firstPerCommitPoint)
+          localParams.maxHtlcValueInFlightMsat, localParams.channelReserveSat, htlcMinimumMsat = 1L, minimumDepth = LNParams.minDepth,
+          localParams.toSelfDelay, localParams.maxAcceptedHtlcs, localParams.fundingPrivKey.publicKey, localParams.revocationBasepoint,
+          localParams.paymentBasepoint, localParams.delayedPaymentBasepoint, localParams.htlcBasepoint, firstPerCommitPoint)
 
 
       case (WaitAcceptData(announce, cmd), accept: AcceptChannel, WAIT_FOR_ACCEPT) if accept.temporaryChannelId == cmd.tempChanId =>
@@ -124,7 +122,7 @@ abstract class NormalChannel extends Channel(isHosted = false) { me =>
         if (accept.channelReserveSatoshis > cmd.fundingSat / 10) throw new LightningException("Their proposed reserve is too high")
         if (accept.toSelfDelay > LNParams.maxToSelfDelay) throw new LightningException("Their toSelfDelay is too high")
         if (accept.dustLimitSatoshis < 546L) throw new LightningException("Their on-chain dust limit is too low")
-        if (accept.htlcMinimumMsat > 100000L) throw new LightningException("Their htlcMinimumMsat is too high")
+        if (accept.htlcMinimumMsat > 546000L) throw new LightningException("Their htlcMinimumMsat is too high")
         if (accept.maxAcceptedHtlcs > 483) throw new LightningException("They can accept too many payments")
         if (accept.maxAcceptedHtlcs < 1) throw new LightningException("They can accept too few payments")
         if (accept.minimumDepth > 6L) throw new LightningException("Their minimumDepth is too high")
@@ -235,11 +233,16 @@ abstract class NormalChannel extends Channel(isHosted = false) { me =>
       // OPEN MODE
 
 
-      case (norm: NormalData, CMDChannelUpdate(upd), OPEN | SLEEPING) =>
-        // Got an empty ChannelUpdate with shortChannelId or a final one
-        val d1 = norm.modify(_.commitments.updateOpt) setTo Some(upd)
-        // Do not trigger listeners for this update
-        data = me STORE d1
+      case (norm: NormalData, upd: ChannelUpdate, OPEN | SLEEPING) if waitingUpdate && !upd.isHosted =>
+        // GUARD: due to timestamp filter the first update they send to us belongs exactly to our channel
+        val isMoreRecentUpdate = norm.commitments.updateOpt.forall(_.timestamp < upd.timestamp)
+        waitingUpdate = false
+
+        if (isMoreRecentUpdate) {
+          // Update data and store it but do not trigger listeners
+          val d1 = norm.modify(_.commitments.updateOpt) setTo Some(upd)
+          data = me STORE d1
+        }
 
 
       case (norm: NormalData, add: UpdateAddHtlc, OPEN) =>
@@ -328,7 +331,7 @@ abstract class NormalChannel extends Channel(isHosted = false) { me =>
         me UPDATA d1 SEND revokeAndAck
         // Clear remote commit first
         doProcess(CMDProceed)
-        events.onSettled(c1)
+        events onSettled c1
 
 
       case (norm: NormalData, rev: RevokeAndAck, OPEN) =>
@@ -731,38 +734,44 @@ abstract class HostedChannelClient extends Channel(isHosted = true) { me =>
 
       case (WaitTheirHostedReply(announce, scriptPubKey), init: InitHostedChannel, WAIT_FOR_ACCEPT) =>
         if (init.liabilityDeadlineBlockdays < LNParams.minHostedLiabilityBlockdays) throw new LightningException("Their liability deadline is too low")
-        if (init.channelCapacitySatoshis < LNParams.minCapacityMsat / 1000L) throw new LightningException("Their proposed channel capacity is too low")
-        if (init.initialClientBalanceSatoshis > init.channelCapacitySatoshis) throw new LightningException("Client init balance is larger than capacity")
-        if (init.minimalOnchainRefundAmountSatoshis > 100000L) throw new LightningException("Their minimal on-chain refund amount is too low")
+        if (init.initialClientBalanceMsat > init.channelCapacityMsat) throw new LightningException("Client init balance is larger than capacity")
+        if (init.minimalOnchainRefundAmountSatoshis > 500000L) throw new LightningException("Their minimal on-chain refund amount is too high")
+        if (init.channelCapacityMsat < LNParams.minCapacityMsat) throw new LightningException("Their proposed channel capacity is too low")
         if (UInt64(100000000L) > init.maxHtlcValueInFlightMsat) throw new LightningException("Their maxHtlcValueInFlightMsat is too low")
-        if (init.htlcMinimumMsat > 100000L) throw new LightningException("Their htlcMinimumMsat is too high")
+        if (init.htlcMinimumMsat > 546000L) throw new LightningException("Their htlcMinimumMsat is too high")
         if (init.maxAcceptedHtlcs < 1) throw new LightningException("They can accept too few payments")
 
-        val so = StateOverride(init.initialClientBalanceSatoshis, LNParams.broadcaster.currentBlockDay)
-        val su = StateUpdate(so).signed(announce.hostedChanId, scriptPubKey, init, LNParams.nodePrivateKey)
-        me UPDATA WaitTheirStateUpdate(announce, scriptPubKey, su, init) SEND su
+        val localSO = StateOverride(init.initialClientBalanceMsat, LNParams.broadcaster.currentBlockDay)
+        val localSU = StateUpdate(localSO).signed(announce.hostedChanId, scriptPubKey, init, LNParams.nodePrivateKey)
+        me UPDATA WaitTheirHostedStateUpdate(announce, scriptPubKey, localSU, init) SEND localSU
 
 
-      case (WaitTheirStateUpdate(announce, refundScriptPubKey, client, init), host: StateUpdate, WAIT_FOR_ACCEPT) =>
-        val validationError = validate(client, host, refundScriptPubKey, init, announce).flatMap(ChanErrorCodes.hostedErrors.get)
-        for (errorMessage <- validationError) throw new LightningException(com.lightning.walletapp.Utils.app getString errorMessage)
+      case (WaitTheirHostedStateUpdate(announce, scriptPubKey, localSU, init), remoteSU: StateUpdate, WAIT_FOR_ACCEPT) =>
+        // We have expected StateUpdate and got it which means no hosted channel exists with this peer yet, so we create one
+        // make sure signatures and other parameters match and if so then become OPEN with initial cross-signed state
 
-        val initHostBalance = init.channelCapacitySatoshis - init.initialClientBalanceSatoshis
-        val localSpec = CommitmentSpec(feeratePerKw = 0L, init.initialClientBalanceSatoshis, initHostBalance)
-        val lcss = LastCrossSignedState(refundScriptPubKey, init, client, host)
+        val remoteLCSS = LastCrossSignedState(scriptPubKey, init, remoteSU, localSU)
+        val expectedHostBalance = init.channelCapacityMsat - init.initialClientBalanceMsat
+        val isNotValid = validate(remoteLCSS, expectedHostBalance)
+        val sigsMismatch = validateSigs(remoteLCSS, announce)
 
-        BECOME(me STORE HostedCommits(announce, lcss, clientUpdatesSoFar = 0L, hostUpdatesSoFar = 0L,
-          reSentUpdates = 0, Vector.empty, Vector.empty, localSpec, updateOpt = None, localError = None,
-          remoteError = None, startedAt = System.currentTimeMillis), OPEN) SEND lcss
+        val errorCode = sigsMismatch.orElse(isNotValid).flatMap(ChanErrorCodes.hostedErrors.get)
+        for (msg <- errorCode) throw new LightningException(com.lightning.walletapp.Utils.app getString msg)
+
+        BECOME(me STORE HostedCommits(announce, remoteLCSS.reverse, allLocalUpdatesSoFar = 0L,
+          allRemoteUpdatesSoFar = 0L, reSentUpdates = 0, localChanges = Vector.empty, remoteChanges = Vector.empty,
+          CommitmentSpec(feeratePerKw = 0L, init.initialClientBalanceMsat, expectedHostBalance), updateOpt = None,
+          localError = None, remoteError = None), OPEN) SEND remoteLCSS.reverse
 
 
-      case (wait: WaitTheirHostedReply, lcss @ LastCrossSignedState(refund, init, client, host), WAIT_FOR_ACCEPT) =>
+      case (wait: WaitTheirHostedReply, remoteLCSS: LastCrossSignedState, WAIT_FOR_ACCEPT) =>
         // We have expected StateUpdate but got LastCrossSignedState which means this channel exists already on host side
         // make sure our signature and other parameters match and if so then become OPEN using host supplied state data
 
-        validate(client, host, refund, init, wait.announce) match {
-          case None => BECOME(me STORE commitsFromCrossSigned(lcss, wait.announce), OPEN) SEND lcss
-          case Some(errCode) => localSuspend(commitsFromCrossSigned(lcss, wait.announce), errCode)
+        val assumedRemoteBalance = remoteLCSS.lastLocalStateUpdate.stateOverride.updatedLocalBalanceMsat
+        validateSigs(remoteLCSS, announce = wait.announce) orElse validate(remoteLCSS, assumedRemoteBalance) match {
+          case None => BECOME(me STORE commitsFromLCSS(remoteLCSS.reverse, wait.announce), OPEN) SEND remoteLCSS.reverse
+          case Some(errorCode) => localSuspend(commitsFromLCSS(remoteLCSS.reverse, wait.announce), errorCode)
         }
 
         // We may have HTLC to fulfill
@@ -800,25 +809,25 @@ abstract class HostedChannelClient extends Channel(isHosted = true) { me =>
         doProcess(CMDProceed)
 
 
-      case (hc: HostedCommits, host1 @ StateUpdate(soHost, _), OPEN) =>
-        val client1 @ StateUpdate(soClient, _) = hc.makeSignedStateUpdate
-        val LastCrossSignedState(refund, init, _, _) = hc.lastCrossSignedState
-        val mustResend = soHost.isBehind(soClient) || soClient.isBehind(soHost)
+      case (hc: HostedCommits, remoteSU: StateUpdate, OPEN) =>
+        // We can only proceed if state update numbers are the same, otherwise keep increasing update number and re-sending our updates
+        val remoteLCSS = hc.lastLocalCrossSignedState.copy(lastLocalStateUpdate = remoteSU, lastRemoteStateUpdate = hc.makeSignedStateUpdate)
+        val mustResendStateUpdate = remoteLCSS.reverse.isBehind(remoteLCSS) || remoteLCSS.isBehind(remoteLCSS.reverse)
 
-        if (mustResend) doProcess(CMDProceed) else {
-          val validationResult = validate(client1, host1, refund, init, hc.announce)
-          if (validationResult.isDefined) localSuspend(hc, validationResult.get) else {
-            val localSpec1 = CommitmentSpec.reduce(hc.localSpec, hc.clientChanges, hc.hostChanges)
-            val lcss1 = hc.lastCrossSignedState.copy(lastClientStateUpdate = client1, lastHostStateUpdate = host1)
-            val hc1 = client1.stateOverride rewind hc.copy(lastCrossSignedState = lcss1, localSpec = localSpec1)
-            // This means they have sent a signature first or we have sent/received Add/Fail/Fulfill since then
-            if (hc.mustReply) me SEND client1
+        if (mustResendStateUpdate) doProcess(CMDProceed) else {
+          val isNotValid = validate(remoteLCSS, hc.nextLocalReduced.toRemoteMsat)
+          val sigsMismatch = validateSigs(remoteLCSS, announce = hc.announce)
+
+          if (sigsMismatch.isDefined || isNotValid.isDefined) localSuspend(hc, sigsMismatch.orElse(isNotValid).get) else {
+            val hc1 = hc.copy(lastLocalCrossSignedState = remoteLCSS.reverse, localSpec = hc.nextLocalReduced).withoutUnsignedChanges
+            // They have sent a signature first or we have sent/received Add/Fail/Fulfill after receiving their last state update
+            if (hc.mustReply) me SEND hc1.lastLocalCrossSignedState.lastLocalStateUpdate
             BECOME(me STORE hc1, OPEN)
-            events.onSettled(hc1)
+            events onSettled hc1
           }
         }
 
-        // We may have HTLC to fulfill
+        // We may have HTLCs to fulfill
         doProcess(CMDHTLCProcess)
 
 
@@ -841,7 +850,7 @@ abstract class HostedChannelClient extends Channel(isHosted = true) { me =>
 
       case (hc: HostedCommits, CMDProceed, OPEN)
         // GUARD: only send update if we have unsigned changes
-        if hc.clientChanges.nonEmpty || hc.hostChanges.nonEmpty =>
+        if hc.localChanges.nonEmpty || hc.remoteChanges.nonEmpty =>
         val hc1 = hc.copy(reSentUpdates = hc.reSentUpdates + 1)
         me UPDATA hc1 SEND hc.makeSignedStateUpdate
 
@@ -849,7 +858,7 @@ abstract class HostedChannelClient extends Channel(isHosted = true) { me =>
       case (hc: HostedCommits, cmd: CMDFulfillHtlc, OPEN) =>
         val fulfillHtlc = UpdateFulfillHtlc(hc.channelId, cmd.add.id, cmd.preimage)
         CommitmentSpec.findHtlcById(hc.localSpec, cmd.add.id, isIncoming = true) match {
-          case Some(htlc) => me UPDATA hc.addClientProposal(fulfillHtlc) SEND fulfillHtlc
+          case Some(htlc) => me UPDATA hc.addLocalProposal(fulfillHtlc) SEND fulfillHtlc
           case None => throw new LightningException
         }
 
@@ -857,13 +866,13 @@ abstract class HostedChannelClient extends Channel(isHosted = true) { me =>
       case (hc: HostedCommits, cmd: CMDFailHtlc, OPEN) =>
         val fail = UpdateFailHtlc(hc.channelId, cmd.id, cmd.reason)
         val notFound = CommitmentSpec.findHtlcById(hc.localSpec, cmd.id, isIncoming = true).isEmpty
-        if (notFound) throw new LightningException else me UPDATA hc.addClientProposal(fail) SEND fail
+        if (notFound) throw new LightningException else me UPDATA hc.addLocalProposal(fail) SEND fail
 
 
       case (hc: HostedCommits, cmd: CMDFailMalformedHtlc, OPEN) =>
         val fail = UpdateFailMalformedHtlc(hc.channelId, cmd.id, cmd.onionHash, cmd.code)
         val notFound = CommitmentSpec.findHtlcById(hc.localSpec, cmd.id, isIncoming = true).isEmpty
-        if (notFound) throw new LightningException else me UPDATA hc.addClientProposal(fail) SEND fail
+        if (notFound) throw new LightningException else me UPDATA hc.addLocalProposal(fail) SEND fail
 
 
       case (hc: HostedCommits, CMDSocketOffline, OPEN) =>
@@ -881,14 +890,15 @@ abstract class HostedChannelClient extends Channel(isHosted = true) { me =>
         isChainHeightKnown = true
 
 
-      case (hc: HostedCommits, lcss @ LastCrossSignedState(refund, init, client, host), SLEEPING) =>
-        val hostCrossSignedStateValidationResult = validate(client, host, refund, init, hc.announce)
-        val clientSo = hc.lastCrossSignedState.lastClientStateUpdate.stateOverride
+      case (hc: HostedCommits, remoteLCSS: LastCrossSignedState, SLEEPING) =>
+        val isNotValid = validate(remoteLCSS, hc.nextLocalReduced.toRemoteMsat)
+        val isBehind = hc.lastLocalCrossSignedState.isBehind(remoteLCSS)
+        val sigsMismatch = validateSigs(remoteLCSS, hc.announce)
 
-        if (hostCrossSignedStateValidationResult.isDefined) localSuspend(hc, hostCrossSignedStateValidationResult.get)
-        else if (clientSo isBehind host.stateOverride) BECOME(me STORE commitsFromCrossSigned(lcss, hc.announce), OPEN) SEND lcss
-        else BECOME(clientSo rewind hc, OPEN) SEND hc.lastCrossSignedState
-        // We may have HTLC to fulfill
+        if (sigsMismatch.isEmpty && isBehind) BECOME(me STORE commitsFromLCSS(remoteLCSS.reverse, hc.announce), OPEN) SEND remoteLCSS.reverse
+        else if (sigsMismatch.isDefined || isNotValid.isDefined) localSuspend(hc, errCode = sigsMismatch.orElse(isNotValid).get)
+        else BECOME(hc.withoutUnsignedChanges, OPEN) SEND hc.lastLocalCrossSignedState
+        // We may now have HTLCs to fulfill
         doProcess(CMDHTLCProcess)
 
 
@@ -898,13 +908,17 @@ abstract class HostedChannelClient extends Channel(isHosted = true) { me =>
         data = me STORE hc.modify(_.announce).setTo(newAnn)
 
 
-      case (hc: HostedCommits, CMDChannelUpdate(upd), OPEN | SLEEPING) =>
-        val Tuple3(blockHeight, _, _) = Tools.fromShortId(upd.shortChannelId)
-        if (blockHeight > LNParams.maxHostedBlockHeight) localSuspend(hc, ERR_HOSTED_UPDATE_BLOCK_TOO_HIGH)
+      case (hc: HostedCommits, upd: ChannelUpdate, OPEN | SLEEPING) if waitingUpdate && upd.isHosted =>
+        // GUARD: due to timestamp filter the first update they send to us belongs exactly to our hosted channel
         if (upd.cltvExpiryDelta < LNParams.minHostedCltvDelta) localSuspend(hc, ERR_HOSTED_UPDATE_CLTV_TOO_LOW)
-        val d1 = hc.modify(_.updateOpt) setTo Some(upd)
-        // Do not trigger listeners for this update
-        data = me STORE d1
+        val isMoreRecentUpdate = hc.updateOpt.forall(_.timestamp < upd.timestamp)
+        waitingUpdate = false
+
+        if (isMoreRecentUpdate) {
+          // Update data and store it but do not trigger listeners
+          val d1 = hc.modify(_.updateOpt) setTo Some(upd)
+          data = me STORE d1
+        }
 
 
       case (hc: HostedCommits, remoteError: Error, OPEN | SLEEPING) =>
@@ -912,24 +926,25 @@ abstract class HostedChannelClient extends Channel(isHosted = true) { me =>
         BECOME(me STORE cs1, SUSPENDED)
 
 
-      case (hc: HostedCommits, CMDStateOverride(so), OPEN | SLEEPING | SUSPENDED) =>
-        val LastCrossSignedState(scriptPubKey, initHostedChannel, lastClientStateUpdate, _) = hc.lastCrossSignedState
-        val isSigOk = StateUpdate(so).verify(hc.announce.hostedChanId, scriptPubKey, initHostedChannel, hc.announce.nodeId)
-        val isRightClientUpdateNumber = so.clientUpdatesSoFar > lastClientStateUpdate.stateOverride.clientUpdatesSoFar
-        val isRightHostUpdateNumber = so.hostUpdatesSoFar > lastClientStateUpdate.stateOverride.hostUpdatesSoFar
-        val isBalanceBounded = so.updatedClientBalanceSatoshis <= initHostedChannel.channelCapacitySatoshis
-        val isBlockdayAcceptable = math.abs(so.blockDay - LNParams.broadcaster.currentBlockDay) <= 1
+      case (hc: HostedCommits, CMDStateOverride(remoteSO), SLEEPING | SUSPENDED) =>
+        val LastCrossSignedState(scriptPubKey, initHostedChannel, lastlocalStateUpdate, _) = hc.lastLocalCrossSignedState
+        val isRightRemoteUpdateNumber = remoteSO.localUpdatesSoFar > lastlocalStateUpdate.stateOverride.remoteUpdatesSoFar
+        val isRightLocalUpdateNumber = remoteSO.remoteUpdatesSoFar > lastlocalStateUpdate.stateOverride.localUpdatesSoFar
+        val isSigOk = StateUpdate(remoteSO).verify(hc.channelId, scriptPubKey, initHostedChannel, hc.announce.nodeId)
+        val isBlockdayAcceptable = math.abs(remoteSO.blockDay - LNParams.broadcaster.currentBlockDay) <= 1
+        val newToLocalMsat = initHostedChannel.channelCapacityMsat - remoteSO.updatedLocalBalanceMsat
 
+        if (!isRightLocalUpdateNumber) throw new LightningException("Provided local update number from StateOverride is wrong")
+        if (!isRightRemoteUpdateNumber) throw new LightningException("Provided remote update number from StateOverride is wrong")
         if (!isBlockdayAcceptable) throw new LightningException("Provided blockday from StateOverride is not acceptable")
-        if (!isRightClientUpdateNumber) throw new LightningException("Provided Client update number from StateOverride is wrong")
-        if (!isRightHostUpdateNumber) throw new LightningException("Provided Host update number from StateOverride is wrong")
-        if (!isBalanceBounded) throw new LightningException("Provided Client updated balance is larger than capacity")
+        if (newToLocalMsat < 0) throw new LightningException("Provided Client updated balance is larger than capacity")
         if (!isSigOk) throw new LightningException("Provided StateOverride signature is wrong")
 
-        val hostStateUpdate = StateUpdate(so, inFlightHtlcs = Nil)
-        val clientStateUpdate = StateUpdate(so).signed(hc.announce.hostedChanId, scriptPubKey, initHostedChannel, LNParams.nodePrivateKey)
-        val lcss = LastCrossSignedState(scriptPubKey, initHostedChannel, clientStateUpdate, hostStateUpdate)
-        BECOME(me STORE commitsFromCrossSigned(lcss, hc.announce), OPEN) SEND lcss
+        val remoteSU = StateUpdate(remoteSO)
+        val recoveredLocalSO = StateOverride(newToLocalMsat, remoteSO.blockDay, remoteSO.remoteUpdatesSoFar, remoteSO.localUpdatesSoFar)
+        val localSU = StateUpdate(recoveredLocalSO).signed(hc.channelId, scriptPubKey, initHostedChannel, LNParams.nodePrivateKey)
+        val localLCSS = LastCrossSignedState(scriptPubKey, initHostedChannel, localSU, remoteSU)
+        BECOME(me STORE commitsFromLCSS(localLCSS, hc.announce), OPEN) SEND localLCSS
 
 
       case (null, wait: WaitTheirHostedReply, null) => super.become(wait, WAIT_FOR_INIT)
@@ -942,37 +957,47 @@ abstract class HostedChannelClient extends Channel(isHosted = true) { me =>
     events onProcessSuccess Tuple3(me, data, change)
   }
 
-  def validate(client: StateUpdate, host: StateUpdate, scriptPubKey: ByteVector,
-               init: InitHostedChannel, ann: NodeAnnouncement): Option[ByteVector] = {
+  def validate(remoteLCSS: LastCrossSignedState, toRemoteMsat: Long) = {
+    val LastCrossSignedState(_, _, theirStateUpdate, ourStateUpdate) = remoteLCSS
+    // We use remote LastCrossSignedState here so their remote update is our local update
+    val isSameHtlcsInFlight = theirStateUpdate.inFlightHtlcs.toSet == ourStateUpdate.inFlightHtlcs.map(_.reverse).toSet
+    val isBlockdayAcceptable = math.abs(theirStateUpdate.stateOverride.blockDay - ourStateUpdate.stateOverride.blockDay) <= 1
+    val isSameRemoteUpdatesSoFar = theirStateUpdate.stateOverride.remoteUpdatesSoFar == ourStateUpdate.stateOverride.localUpdatesSoFar
+    val isSameLocalUpdatesSoFar = theirStateUpdate.stateOverride.localUpdatesSoFar == ourStateUpdate.stateOverride.remoteUpdatesSoFar
+    val isRemoteBalanceOk = theirStateUpdate.stateOverride.updatedLocalBalanceMsat == toRemoteMsat
 
-    val isSameHtlcsInFlight = client.inFlightHtlcs.toSet == host.inFlightHtlcs.toSet
-    val isBlockdayAcceptable = math.abs(client.stateOverride.blockDay - host.stateOverride.blockDay) <= 1
-    val isSameBalance = client.stateOverride.updatedClientBalanceSatoshis == host.stateOverride.updatedClientBalanceSatoshis
-    val isSameClientUpdatesSoFar = client.stateOverride.clientUpdatesSoFar == host.stateOverride.clientUpdatesSoFar
-    val isSameHostUpdatesSoFar = client.stateOverride.hostUpdatesSoFar == host.stateOverride.hostUpdatesSoFar
-    val clientSigOk = client.verify(ann.hostedChanId, scriptPubKey, init, LNParams.nodePublicKey)
-    val hostSigOk = host.verify(ann.hostedChanId, scriptPubKey, init, ann.nodeId)
-
-    if (!isSameBalance) Some(ERR_HOSTED_WRONG_BALANCE)
+    if (!isRemoteBalanceOk) Some(ERR_HOSTED_WRONG_REMOTE_BALANCE)
     else if (!isSameHtlcsInFlight) Some(ERR_HOSTED_WRONG_IN_FLIGHT)
     else if (!isBlockdayAcceptable) Some(ERR_HOSTED_WRONG_BLOCKDAY)
-    else if (!isSameClientUpdatesSoFar) Some(ERR_HOSTED_WRONG_CLIENT_NUMBER)
-    else if (!isSameHostUpdatesSoFar) Some(ERR_HOSTED_WRONG_HOST_NUMBER)
-    else if (!clientSigOk) Some(ERR_HOSTED_WRONG_CLIENT_SIG)
-    else if (!hostSigOk) Some(ERR_HOSTED_WRONG_HOST_SIG)
+    else if (!isSameLocalUpdatesSoFar) Some(ERR_HOSTED_WRONG_LOCAL_NUMBER)
+    else if (!isSameRemoteUpdatesSoFar) Some(ERR_HOSTED_WRONG_REMOTE_NUMBER)
     else None
   }
 
-  def commitsFromCrossSigned(lcss: LastCrossSignedState, announce: NodeAnnouncement): HostedCommits = {
-    val inFlightHtlcs = for (Tuple5(incoming, id, amountMsat, paymentHash, expiry) <- lcss.lastClientStateUpdate.inFlightHtlcs) yield {
-      val addHtlc = UpdateAddHtlc(announce.hostedChanId, id, amountMsat, paymentHash, expiry, onionRoutingPacket = Sphinx.emptyOnionPacket)
-      Htlc(incoming, addHtlc)
-    }
+  def validateSigs(remoteLCSS: LastCrossSignedState, announce: NodeAnnouncement) = {
+    // We use remote LastCrossSignedState here so their remote update is our local update
+    val LastCrossSignedState(scriptPubKey, init, theirStateUpdate, ourStateUpdate) = remoteLCSS
+    val remoteSigOk = theirStateUpdate.verify(announce.hostedChanId, scriptPubKey, init, announce.nodeId)
+    val localSigOk = ourStateUpdate.verify(announce.hostedChanId, scriptPubKey, init, LNParams.nodePublicKey)
 
-    val so = lcss.lastClientStateUpdate.stateOverride
-    val hostBalance = lcss.initHostedChannel.channelCapacitySatoshis - so.updatedClientBalanceSatoshis
-    HostedCommits(announce, lcss, so.clientUpdatesSoFar, so.hostUpdatesSoFar, 0, Vector.empty, Vector.empty,
-      CommitmentSpec(feeratePerKw = 0L, so.updatedClientBalanceSatoshis, hostBalance, inFlightHtlcs.toSet),
+    if (!remoteSigOk) Some(ERR_HOSTED_WRONG_REMOTE_SIG)
+    else if (!localSigOk) Some(ERR_HOSTED_WRONG_LOCAL_SIG)
+    else None
+  }
+
+  def commitsFromLCSS(localLCSS: LastCrossSignedState, announce: NodeAnnouncement): HostedCommits = {
+    // LastCrossSignedState is directional so `reverse` method must be applied whenever we use their lcss here
+    // We must always make sure LastCrossSignedState is valid before applying this method
+
+    val spec = CommitmentSpec(feeratePerKw = 0L,
+      toLocalMsat = localLCSS.lastLocalStateUpdate.stateOverride.updatedLocalBalanceMsat,
+      toRemoteMsat = localLCSS.lastRemoteStateUpdate.stateOverride.updatedLocalBalanceMsat,
+      htlcs = localLCSS.lastLocalStateUpdate.inFlightHtlcs.map(_ toHtlc announce.hostedChanId).toSet)
+
+    HostedCommits(announce, localLCSS,
+      allLocalUpdatesSoFar = localLCSS.lastLocalStateUpdate.stateOverride.localUpdatesSoFar,
+      allRemoteUpdatesSoFar = localLCSS.lastLocalStateUpdate.stateOverride.remoteUpdatesSoFar,
+      reSentUpdates = 0, localChanges = Vector.empty, remoteChanges = Vector.empty, localSpec = spec,
       updateOpt = None, localError = None, remoteError = None, startedAt = System.currentTimeMillis)
   }
 
@@ -1004,7 +1029,7 @@ object NormalChannel {
 
   def isOperational(chan: Channel) = chan.data match {
     case _: HostedCommits => chan.state != SUSPENDED
-    case NormalData(_, _, None, None, _) => true
+    case NormalData(_, _, None, None, None) => true
     case _ => false
   }
 

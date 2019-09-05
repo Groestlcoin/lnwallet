@@ -16,6 +16,7 @@ import com.lightning.walletapp.lnutils.ImplicitJsonFormats._
 import com.lightning.walletapp.Utils.app.TransData.nodeLink
 import com.lightning.walletapp.helper.ThrottledWork
 import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.MilliSatoshi
 import org.bitcoinj.uri.BitcoinURI
 import scodec.bits.ByteVector
 import android.os.Bundle
@@ -186,7 +187,7 @@ object LNUrlData {
 }
 
 sealed trait LNUrlData {
-  def unsafe(request: String) = get(request, true).trustAllCerts.trustAllHosts.body
+  def unsafe(request: String) = get(request, true).trustAllCerts.trustAllHosts
   require(callback contains "https://", "Callback does not have HTTPS prefix")
   val callback: String
 }
@@ -195,13 +196,38 @@ case class WithdrawRequest(callback: String, k1: String,
                            maxWithdrawable: Long, defaultDescription: String,
                            minWithdrawable: Option[Long] = None) extends LNUrlData {
 
-  val minCanReceive = minWithdrawable getOrElse 1L
-  require(minCanReceive >= 1L, "minCanReceive is too low")
-  require(minCanReceive <= maxWithdrawable, "minCanReceive is too high")
+  val minCanReceive = MilliSatoshi(minWithdrawable getOrElse 1L)
+  require(minCanReceive.amount <= maxWithdrawable)
+  require(minCanReceive.amount >= 1L)
+
+  def requestWithdraw(lnUrl: LNUrl, pr: PaymentRequest) = {
+    val privateKey = LNParams.getLinkingKey(lnUrl.uri.getHost)
+    val request = android.net.Uri.parse(callback).buildUpon
+      .appendQueryParameter("pr", PaymentRequest write pr)
+      .appendQueryParameter("k1", k1)
+
+    val req1Try = for {
+      dataToSign <- Try(ByteVector fromValidHex k1)
+      sig = Tools.sign(dataToSign, privateKey).toHex
+    } yield request.appendQueryParameter("sig", sig)
+    unsafe(req1Try.getOrElse(request).build.toString)
+  }
 }
 
 case class IncomingChannelRequest(uri: String, callback: String, k1: String) extends LNUrlData {
-  def resolveAnnounce = app.mkNodeAnnouncement(PublicKey(ByteVector fromValidHex key), NodeAddress.fromParts(host, port.toInt), host)
-  def requestChannel = unsafe(s"$callback?k1=$k1&remoteid=${LNParams.nodePublicKey.toString}&private=1")
+  // Recreate node announcement from supplied data and call a second level callback once connected
   val nodeLink(key, host, port) = uri
+
+  def resolveNodeAnnouncement = {
+    val nodeId = PublicKey(ByteVector fromValidHex key)
+    val nodeAddress = NodeAddress.fromParts(host, port.toInt)
+    app.mkNodeAnnouncement(nodeId, nodeAddress, host)
+  }
+
+  def requestChannel =
+    unsafe(android.net.Uri.parse(callback).buildUpon
+      .appendQueryParameter("remoteid", LNParams.nodePublicKey.toString)
+      .appendQueryParameter("private", "1")
+      .appendQueryParameter("k1", k1)
+      .build.toString)
 }

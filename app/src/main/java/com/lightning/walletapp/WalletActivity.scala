@@ -7,15 +7,20 @@ import android.text.format.DateUtils._
 import com.lightning.walletapp.Utils._
 import com.lightning.walletapp.R.string._
 import com.lightning.walletapp.ln.Tools._
+import com.lightning.walletapp.Denomination._
 import com.lightning.walletapp.ln.NormalChannel._
 import com.github.kevinsawicki.http.HttpRequest._
 import com.lightning.walletapp.lnutils.ImplicitJsonFormats._
 import com.lightning.walletapp.lnutils.ImplicitConversions._
+
+import scala.util.{Success, Try}
 import android.app.{Activity, AlertDialog}
 import com.lightning.walletapp.lnutils.{GDrive, PaymentInfoWrap}
 import com.lightning.walletapp.lnutils.JsonHttpUtils.{queue, to}
 import com.lightning.walletapp.lnutils.IconGetter.{bigFont, scrWidth}
 import com.lightning.walletapp.ln.wire.{LightningMessage, NodeAnnouncement, OpenChannel}
+
+import io.github.douglasjunior.androidSimpleTooltip.SimpleTooltip
 import android.support.v4.app.FragmentStatePagerAdapter
 import org.ndeftools.util.activity.NfcReaderActivity
 import com.lightning.walletapp.helper.AwaitService
@@ -27,14 +32,11 @@ import android.text.format.DateFormat
 import fr.acinq.bitcoin.MilliSatoshi
 import org.bitcoinj.uri.BitcoinURI
 import java.text.SimpleDateFormat
-
 import scodec.bits.ByteVector
 import android.content.Intent
 import org.ndeftools.Message
 import android.os.Bundle
 import java.util.Date
-
-import io.github.douglasjunior.androidSimpleTooltip.SimpleTooltip
 
 
 trait SearchBar { me =>
@@ -106,22 +108,6 @@ class WalletActivity extends NfcReaderActivity with ScanActivity { me =>
     def getCount = 2
   }
 
-  private[this] val connectionListener = new ConnectionListener {
-    override def onMessage(nodeId: PublicKey, msg: LightningMessage) = msg match {
-      case open: OpenChannel if !open.channelFlags.isPublic => onOpenOffer(nodeId, open)
-      case _ => // Ignore public channel offers
-    }
-
-    override def onOpenOffer(nodeId: PublicKey, open: OpenChannel) =
-      ConnectionManager.workers get nodeId foreach { existingWorkerConnection =>
-        val startFundIncomingChannel = app getString ln_ops_start_fund_incoming_channel
-        val hnv = HardcodedNodeView(existingWorkerConnection.ann, startFundIncomingChannel)
-        // This will only work once if user is not on LNStartFundActivity already
-        app.TransData.value = IncomingChannelParams(hnv, open)
-        me goTo classOf[LNStartFundActivity]
-      }
-  }
-
   override def onDestroy = wrap(super.onDestroy)(stopDetecting)
   override def onResume = wrap(super.onResume)(me returnToBase null)
   override def onOptionsItemSelected(m: MenuItem): Boolean = runAnd(true) {
@@ -156,7 +142,6 @@ class WalletActivity extends NfcReaderActivity with ScanActivity { me =>
 
   def INIT(state: Bundle) = if (app.isAlive) {
     wrap(me setDetecting true)(me initNfc state)
-    ConnectionManager.listeners += connectionListener
     me setContentView R.layout.activity_double_pager
     walletPager setAdapter slidingFragmentAdapter
 
@@ -194,8 +179,10 @@ class WalletActivity extends NfcReaderActivity with ScanActivity { me =>
       // Erase TransData value
       goOps(null): Unit
 
-    case bitcoinUri: BitcoinURI =>
-      FragWallet.worker.sendBtcPopup(bitcoinUri)
+    case btcURI: BitcoinURI =>
+      val canSendOffChain = Try(btcURI.getAmount).map(coin2MSat).filter(msat => ChannelManager.estimateAIRCanSend >= msat.amount).isSuccess
+      if (canSendOffChain && btcURI.getLightningRequest != null) <(app.TransData recordValue btcURI.getLightningRequest, onFail)(_ => checkTransData)
+      else FragWallet.worker.sendBtcPopup(btcURI)
       me returnToBase null
 
     case lnUrl: LNUrl =>
@@ -247,21 +234,37 @@ class WalletActivity extends NfcReaderActivity with ScanActivity { me =>
 
   def initConnection(incoming: IncomingChannelRequest) = {
     ConnectionManager.listeners += new ConnectionListener { self =>
-      override def onOperational(nodeId: PublicKey, isCompat: Boolean) = if (isCompat) {
-        queue.map(_ => incoming.requestChannel).map(LNUrlData.guardResponse).foreach(none, onFail)
-        ConnectionManager.listeners -= self
+      override def onDisconnect(nodeId: PublicKey) = ConnectionManager.listeners -= self
+      override def onOperational(nodeId: PublicKey, isCompatible: Boolean) = if (isCompatible) {
+        queue.map(_ => incoming.requestChannel.body).map(LNUrlData.guardResponse).foreach(none, onFail)
       }
+
+      override def onMessage(nodeId: PublicKey, msg: LightningMessage) = msg match {
+        case open: OpenChannel if !open.channelFlags.isPublic => onOpenOffer(nodeId, open)
+        case _ => // Ignore anything else including public channel offers
+      }
+
+      override def onOpenOffer(nodeId: PublicKey, open: OpenChannel) =
+        ConnectionManager.workers get nodeId foreach { existingWorkerConnection =>
+          val startFundIncomingChannel = app getString ln_ops_start_fund_incoming_channel
+          val hnv = HardcodedNodeView(existingWorkerConnection.ann, startFundIncomingChannel)
+          app.TransData.value = IncomingChannelParams(hnv, open)
+          me goTo classOf[LNStartFundActivity]
+          onDisconnect(nodeId)
+        }
     }
 
-    <(incoming.resolveAnnounce, onFail) { ann =>
-      // Make sure we have an LN connection before asking
-      ConnectionManager.connectTo(ann, notify = true)
+    <(incoming.resolveNodeAnnouncement, onFail) { ann =>
+      val hasChanAlready = ChannelManager hasNormalChanWith ann.nodeId
+      if (hasChanAlready) app toast err_ln_chan_exists_already
+      else ConnectionManager.connectTo(ann, notify = true)
     }
   }
 
   def showLoginForm(lnUrl: LNUrl) = lnUrl.k1 map { k1 =>
-    lazy val linkingPrivKey = LNParams getLinkingKey lnUrl.uri.getHost
-    lazy val linkingPubKey = linkingPrivKey.publicKey.toString
+    val linkingPrivKey = LNParams.getLinkingKey(lnUrl.uri.getHost)
+    val linkingPubKey = linkingPrivKey.publicKey.toString
+    val dataToSign = ByteVector.fromValidHex(k1)
 
     def wut(alert: AlertDialog): Unit = {
       val bld = baseTextBuilder(getString(ln_url_info_login).format(lnUrl.uri.getHost, linkingPubKey).html)
@@ -269,11 +272,16 @@ class WalletActivity extends NfcReaderActivity with ScanActivity { me =>
     }
 
     def doLogin(alert: AlertDialog) = rm(alert) {
-      val signature = Tools.sign(ByteVector fromValidHex k1, linkingPrivKey).toHex
-      val secondLevelCallback = get(s"${lnUrl.request}?k1=$k1&sig=$signature&key=$linkingPubKey", true)
-      val secondLevelRequest = secondLevelCallback.connectTimeout(7500).trustAllCerts.trustAllHosts
-      queue.map(_ => secondLevelRequest.body).map(LNUrlData.guardResponse).foreach(none, onFail)
+      val sig = Tools.sign(dataToSign, linkingPrivKey)
+      val secondLevelRequestUri = lnUrl.uri.buildUpon.appendQueryParameter("sig", sig.toHex).appendQueryParameter("key", linkingPubKey)
+      val sslAwareSecondRequest = get(secondLevelRequestUri.build.toString, true).connectTimeout(15000).trustAllCerts.trustAllHosts
+      queue.map(_ => sslAwareSecondRequest.body).map(LNUrlData.guardResponse).foreach(_ => onLoginSuccess.run, onFail)
       app.toast(ln_url_resolving)
+    }
+
+    def onLoginSuccess = UITask {
+      val message = getString(ln_url_login_ok).format(lnUrl.uri.getHost).html
+      mkCheckForm(alert => rm(alert)(finish), none, baseTextBuilder(message), dialog_close, -1)
     }
 
     val title = updateView2Blue(oldView = str2View(new String), s"<big>${lnUrl.uri.getHost}</big>")
@@ -299,17 +307,14 @@ class WalletActivity extends NfcReaderActivity with ScanActivity { me =>
     extra match {
       case Some(wr \ lnUrl) =>
         val title = updateView2Blue(str2View(new String), app getString ln_receive_title)
-        val minCanReceive = MilliSatoshi(wr.minCanReceive max LNParams.minHtlcValue.amount)
         val finalMaxCanReceiveCapped = MilliSatoshi(wr.maxWithdrawable min maxCanReceive.amount)
 
         if (viableChannels.isEmpty) showForm(negTextBuilder(dialog_ok, getString(ln_receive_howto).html).create)
         else if (withRoutes.isEmpty) showForm(negTextBuilder(dialog_ok, getString(ln_receive_6conf).html).create)
         else if (maxCanReceive.amount < 0L) showForm(negTextBuilder(dialog_ok, reserveUnspentWarning.html).create)
-        else FragWallet.worker.receive(withRoutes, finalMaxCanReceiveCapped, minCanReceive, title, wr.defaultDescription) { rd =>
-          def requestWithdraw = wr.unsafe(s"${wr.callback}?k1=${wr.k1}&sig=$makeSignature&pr=${PaymentRequest write rd.pr}")
-          def makeSignature = Tools.sign(ByteVector fromValidHex wr.k1, LNParams getLinkingKey lnUrl.uri.getHost).toHex
+        else FragWallet.worker.receive(withRoutes, finalMaxCanReceiveCapped, wr.minCanReceive, title, wr.defaultDescription) { rd =>
+          queue.map(_ => wr.requestWithdraw(lnUrl, rd.pr).body).map(LNUrlData.guardResponse).foreach(none, onRequestFailed)
           def onRequestFailed(response: Throwable) = wrap(PaymentInfoWrap failOnUI rd)(me onFail response)
-          queue.map(_ => requestWithdraw).map(LNUrlData.guardResponse).foreach(none, onRequestFailed)
         }
 
       case None =>
@@ -325,7 +330,7 @@ class WalletActivity extends NfcReaderActivity with ScanActivity { me =>
 
         def offChain = rm(alert) {
           if (viableChannels.isEmpty) showForm(negTextBuilder(dialog_ok, app.getString(ln_receive_howto).html).create)
-          else FragWallet.worker.receive(withRoutes, maxCanReceive, LNParams.minHtlcValue, app.getString(ln_receive_title).html, new String) { rd =>
+          else FragWallet.worker.receive(withRoutes, maxCanReceive, MilliSatoshi(1L), app.getString(ln_receive_title).html, new String) { rd =>
             foregroundServiceIntent.putExtra(AwaitService.SHOW_AMOUNT, denom asString rd.pr.amount.get).setAction(AwaitService.SHOW_AMOUNT)
             ContextCompat.startForegroundService(me, foregroundServiceIntent)
             timer.schedule(me stopService foregroundServiceIntent, 1800000)

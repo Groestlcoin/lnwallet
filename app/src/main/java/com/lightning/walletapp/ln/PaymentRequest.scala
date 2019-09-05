@@ -41,7 +41,7 @@ object LNUrl {
 }
 
 case class LNUrl(request: String) {
-  val uri = android.net.Uri parse request
+  val uri = android.net.Uri.parse(request)
   require(uri.toString contains "https://", "First level uri is not an HTTPS endpoint")
   lazy val isLogin: Boolean = Try(uri getQueryParameter "tag" contains "login").getOrElse(false)
   lazy val k1: Try[String] = Try(uri getQueryParameter "k1")
@@ -113,7 +113,7 @@ case class UnknownTag(tag: Int5, int5s: Bytes) extends Tag {
 case class PaymentRequest(prefix: String, amount: Option[MilliSatoshi], timestamp: Long,
                           nodeId: PublicKey, tags: Vector[Tag], signature: ByteVector) {
 
-  lazy val msatOrMin = amount getOrElse LNParams.minHtlcValue
+  lazy val msatOrMin = amount getOrElse MilliSatoshi(1L)
   lazy val adjustedMinFinalCltvExpiry = minFinalCltvExpiry.getOrElse(0L) + 10L
   lazy val description = tags.collectFirst { case DescriptionTag(info) => info }.getOrElse(new String)
   lazy val minFinalCltvExpiry = tags.collectFirst { case m: MinFinalCltvExpiryTag => m.expiryDelta }
@@ -168,9 +168,10 @@ object PaymentRequest {
             privKey: PrivateKey, description: String, fallbackAddress: Option[String],
             routes: PaymentRouteVec): PaymentRequest = {
 
-    val baseTags = Vector(DescriptionTag(description), MinFinalCltvExpiryTag(72), PaymentHashTag(paymentHash), expiryTag)
+    val timestampSecs = System.currentTimeMillis / 1000L
+    val baseTags = Vector(DescriptionTag(description), MinFinalCltvExpiryTag(LNParams.blocksPerDay), PaymentHashTag(paymentHash), expiryTag)
     val completeTags = routes.map(RoutingInfoTag.apply) ++ fallbackAddress.map(FallbackAddressTag.apply).toVector ++ baseTags
-    PaymentRequest(prefixes(chain), amount, System.currentTimeMillis / 1000L, privKey.publicKey, completeTags, ByteVector.empty) sign privKey
+    PaymentRequest(prefixes(chain), amount, timestampSecs, privKey.publicKey, completeTags, ByteVector.empty) sign privKey
   }
 
   object Amount {
