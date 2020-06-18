@@ -91,11 +91,11 @@ class FragLNStart extends Fragment with SearchBar with HumanTimeDisplay { me =>
   val testOlympus2 = HardcodedNodeView(testOlympus2Na, "<i>olympus-test2.groestlcoin.org</i>")
 
   //Mainnet
-  val GRSPayKey = PublicKey.fromValidHex("0391c8d0e27fe61ed8cb8784aeae5848bd8b193ea5720dea32ca2694a326fe41f9")
+  val GRSPayKey = PublicKey.fromValidHex("02c0ef8fad8a9d3176424826367a7f9470feb2ad86fa4634d9454190eda876d0ad")
   val GRSPayNa = app.mkNodeAnnouncement(GRSPayKey, NodeAddress.fromParts("104.236.133.196", 9735), "grspay")
   val GRSPay = HardcodedNodeView(GRSPayNa, "<i>grspay.com</i>")
 
-  val LNKey = PublicKey.fromValidHex("03046e1650b0e67925d260f4888f809598af6cef58fbfc6446fbd4fddf1828ca3d")
+  val LNKey = PublicKey.fromValidHex("0221af9e2a67c90ffac37db331ab847439509465d599933d4b9b20352ae493c1c1")
   val LNNa = app.mkNodeAnnouncement(LNKey, NodeAddress.fromParts("104.236.130.222", 9735), "lnmainnet")
   val LNPay = HardcodedNodeView(LNNa, "<i>lnmainnet.groestlcoin.org</i>")
 
