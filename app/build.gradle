@@ -11,12 +11,12 @@ android {
     buildToolsVersion '28.0.3'
 
     defaultConfig {
-        versionName "0.3"
+        versionName "0.3.2"
         applicationId "org.groestlcoin.lnwallet"
         multiDexEnabled true
         targetSdkVersion 28
         minSdkVersion 21
-        versionCode 1361
+        versionCode 1363
     }
 
     buildTypes {
@@ -40,11 +40,14 @@ android {
             resources.srcDirs = ['src/testnet/resources']
         }
     }
+    flavorDimensions "app"
     productFlavors {
         mainnet {
+            dimension "app"
             applicationId = "org.groestlcoin.lnwallet"
         }
         _testnet {
+            dimension "app"
             applicationId = "org.groestlcoin.lnwallet.testnet"
         }
     }
